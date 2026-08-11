@@ -53,8 +53,8 @@ type Client struct {
 	agent *agent.Service
 }
 
-func New(service *agent.Service) (*Client, error) {
-	api, err := realmrootapi.NewClientWithResponses(service.APIBaseURL())
+func New(service *agent.Service, httpClient realmrootapi.HttpRequestDoer) (*Client, error) {
+	api, err := realmrootapi.NewClientWithResponses(service.APIBaseURL(), realmrootapi.WithHTTPClient(httpClient))
 	if err != nil {
 		return nil, err
 	}

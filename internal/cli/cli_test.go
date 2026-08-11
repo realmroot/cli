@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRootHelpExposesOnlyProductCommands(t *testing.T) {
@@ -43,5 +44,16 @@ func TestParseToolboxFlags(t *testing.T) {
 	args, err := app.parseToolboxFlags([]string{"--json", "github", "repos", "get"})
 	if err != nil || !app.json || strings.Join(args, " ") != "github repos get" {
 		t.Fatalf("args=%v json=%v err=%v", args, app.json, err)
+	}
+}
+
+func TestServicesUseBoundedHTTPClient(t *testing.T) {
+	app := &App{origin: "https://id.realmroot.dev"}
+	_, _, httpClient, err := app.services()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if httpClient.Timeout != 30*time.Second {
+		t.Fatalf("HTTP timeout = %s, want 30s", httpClient.Timeout)
 	}
 }

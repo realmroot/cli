@@ -72,7 +72,7 @@ func (a *App) requestCommand() *cobra.Command {
 			}
 			ctx, cancel := context.WithTimeout(command.Context(), 15*time.Minute)
 			defer cancel()
-			agentService, catalogClient, err := a.services()
+			agentService, catalogClient, httpClient, err := a.services()
 			if err != nil {
 				return err
 			}
@@ -80,7 +80,7 @@ func (a *App) requestCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			accessService, err := access.New(agentService)
+			accessService, err := access.New(agentService, httpClient)
 			if err != nil {
 				return err
 			}
@@ -115,7 +115,7 @@ func (a *App) toolboxCommand() *cobra.Command {
 			}
 			ctx, cancel := context.WithTimeout(command.Context(), 2*time.Minute)
 			defer cancel()
-			agentService, catalogClient, err := a.services()
+			agentService, catalogClient, _, err := a.services()
 			if err != nil {
 				return err
 			}
@@ -150,7 +150,7 @@ func (a *App) parseToolboxFlags(args []string) ([]string, error) {
 }
 
 func (a *App) enroll(command *cobra.Command, _ []string) error {
-	service, _, err := a.services()
+	service, _, _, err := a.services()
 	if err != nil {
 		return err
 	}
@@ -164,7 +164,7 @@ func (a *App) enroll(command *cobra.Command, _ []string) error {
 }
 
 func (a *App) whoami(command *cobra.Command, _ []string) error {
-	service, _, err := a.services()
+	service, _, _, err := a.services()
 	if err != nil {
 		return err
 	}
@@ -241,16 +241,17 @@ func (a *App) runRestish(ctx context.Context, service *agent.Service, client *ca
 	return runtime.Run(argv)
 }
 
-func (a *App) services() (*agent.Service, *catalog.Client, error) {
-	service, err := agent.NewService(a.origin, &http.Client{Timeout: 30 * time.Second})
+func (a *App) services() (*agent.Service, *catalog.Client, *http.Client, error) {
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	service, err := agent.NewService(a.origin, httpClient)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	client, err := catalog.New(service)
+	client, err := catalog.New(service, httpClient)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return service, client, nil
+	return service, client, httpClient, nil
 }
 
 func (a *App) printJSON(value any) error {
