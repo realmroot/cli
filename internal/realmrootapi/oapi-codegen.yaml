@@ -1,0 +1,19 @@
+package: realmrootapi
+output: client.gen.go
+generate:
+  models: true
+  client: true
+output-options:
+  include-operation-ids:
+    - createAgentEnrollment
+    - getAgentEnrollment
+    - getAgentStatus
+    - listResourceServers
+    - getResourceServer
+    - listResourceServerAuthorizationDetails
+    - createConnectionRequest
+    - getConnectionRequest
+    - createAgentAuthorizationRequest
+    - getAgentAuthorizationRequest
+    - createAgentAccessRequestCredential
+
