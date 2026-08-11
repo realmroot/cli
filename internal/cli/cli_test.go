@@ -93,15 +93,18 @@ func TestParseToolboxFlags(t *testing.T) {
 
 func TestParseExecFlagsPreservesNativeArgumentsAfterSeparator(t *testing.T) {
 	app := &App{}
-	args, err := app.parseExecFlags([]string{"--json", "github", "--", "gh", "pr", "list", "--json"})
+	args, options, err := app.parseExecFlags([]string{"--json", "--scope", "pull_requests:read", "github", "--", "gh", "pr", "list", "--json"})
 	if err != nil || !app.json || strings.Join(args, " ") != "github -- gh pr list --json" {
 		t.Fatalf("args=%v json=%v err=%v", args, app.json, err)
+	}
+	if len(options.scopes) != 1 || options.scopes[0] != "pull_requests:read" {
+		t.Fatalf("options = %#v", options)
 	}
 }
 
 func TestParseExecFlagsAcceptsRealmrootOriginBeforeSeparator(t *testing.T) {
 	app := &App{}
-	args, err := app.parseExecFlags([]string{"--realmroot-origin=https://id.example", "github"})
+	args, _, err := app.parseExecFlags([]string{"--realmroot-origin=https://id.example", "github"})
 	if err != nil || app.origin != "https://id.example" || strings.Join(args, " ") != "github" {
 		t.Fatalf("args=%v origin=%q err=%v", args, app.origin, err)
 	}

@@ -106,6 +106,82 @@ func TestActiveBindingForResourceKeepsExactOfferForNativeTools(t *testing.T) {
 	}
 }
 
+func TestAuthorizationContextsSelectsAnExistingContextWithoutExposingItsReference(t *testing.T) {
+	service, resource := serviceWithCredentialSources(t, map[string]credentialSource{
+		testCredentialSourceReference:   sourceWithScopes(t, "workspace-1", []string{"files:write"}, []string{"files:read"}),
+		secondCredentialSourceReference: sourceWithScopes(t, "workspace-2", []string{"files:read"}),
+	})
+	writeActiveBindings(t, service, 2, map[string]any{
+		resource: map[string]any{"reference": testCredentialSourceReference, "scopes": []string{"files:write"}},
+	})
+
+	contexts, err := service.AuthorizationContexts(resource)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(contexts) != 2 || !contexts[0].Active || contexts[1].Active {
+		t.Fatalf("contexts = %#v", contexts)
+	}
+	selected, err := service.SelectAuthorizationContext(resource, []map[string]any{{"type": "workspace", "identifier": "workspace-2"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !selected.Active || len(selected.Scopes) != 1 || selected.Scopes[0] != "files:read" {
+		t.Fatalf("selected = %#v", selected)
+	}
+	active, err := service.ActiveBindingForResource(resource)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if active.Reference != secondCredentialSourceReference || len(active.Scopes) != 1 || active.Scopes[0] != "files:read" {
+		t.Fatalf("active = %#v", active)
+	}
+}
+
+func TestBindingForAuthorizationContextDoesNotChangeTheActiveContext(t *testing.T) {
+	service, resource := serviceWithCredentialSources(t, map[string]credentialSource{
+		testCredentialSourceReference:   sourceWithScopes(t, "workspace-1", []string{"files:read"}),
+		secondCredentialSourceReference: sourceWithScopes(t, "workspace-2", []string{"files:write"}),
+	})
+	writeActiveBindings(t, service, 2, map[string]any{
+		resource: map[string]any{"reference": testCredentialSourceReference, "scopes": []string{"files:read"}},
+	})
+
+	binding, _, err := service.BindingForAuthorizationContext(resource, []map[string]any{{"type": "workspace", "identifier": "workspace-2"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if binding.Reference != secondCredentialSourceReference {
+		t.Fatalf("binding = %#v", binding)
+	}
+	active, err := service.ActiveBindingForResource(resource)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if active.Reference != testCredentialSourceReference {
+		t.Fatalf("active binding changed = %#v", active)
+	}
+}
+
+func TestBindingForReferenceScopeAlternativesNeverSwitchesAuthorizationContext(t *testing.T) {
+	service, resource := serviceWithCredentialSources(t, map[string]credentialSource{
+		testCredentialSourceReference:   sourceWithScopes(t, "workspace-1", []string{"files:read"}),
+		secondCredentialSourceReference: sourceWithScopes(t, "workspace-2", []string{"files:write"}),
+	})
+
+	_, err := service.BindingForReferenceScopeAlternatives(resource, testCredentialSourceReference, [][]string{{"files:write"}})
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("error = %v", err)
+	}
+	binding, err := service.BindingForReferenceScopeAlternatives(resource, secondCredentialSourceReference, [][]string{{"files:write"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if binding.Reference != secondCredentialSourceReference || len(binding.Scopes) != 1 || binding.Scopes[0] != "files:write" {
+		t.Fatalf("binding = %#v", binding)
+	}
+}
+
 func sourceWithScopes(t *testing.T, workspace string, scopeSets ...[]string) credentialSource {
 	t.Helper()
 	offers := make([]dpopCredential, 0, len(scopeSets))

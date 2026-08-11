@@ -24,11 +24,16 @@ type Runner struct {
 	stderr  io.Writer
 }
 
+type RunOptions struct {
+	Scopes               []string
+	AuthorizationDetails []map[string]any
+}
+
 func NewRunner(service *agent.Service, client *http.Client, stdin io.Reader, stdout, stderr io.Writer) *Runner {
 	return &Runner{service: service, client: client, stdin: stdin, stdout: stdout, stderr: stderr}
 }
 
-func (r *Runner) Run(ctx context.Context, server catalog.ResourceServer, integrations []catalog.ToolIntegration, command []string) error {
+func (r *Runner) Run(ctx context.Context, server catalog.ResourceServer, integrations []catalog.ToolIntegration, command []string, options RunOptions) error {
 	if len(command) == 0 {
 		return errors.New("native command is required after --")
 	}
@@ -36,11 +41,35 @@ func (r *Runner) Run(ctx context.Context, server catalog.ResourceServer, integra
 	if err != nil {
 		return err
 	}
-	binding, err := r.service.ActiveBindingForResource(server.ResourceURL)
-	if err != nil {
-		return fmt.Errorf("load active %s authority: %w; request access with `realmroot agent request`", server.CommandName, err)
+	var binding agent.CredentialBinding
+	if len(options.AuthorizationDetails) > 0 {
+		binding, _, err = r.service.BindingForAuthorizationContext(server.ResourceURL, options.AuthorizationDetails)
+	} else {
+		binding, err = r.service.ActiveBindingForResource(server.ResourceURL)
 	}
-	broker, err := NewBroker(server.ResourceURL, binding.Reference, binding.Scopes, r.service.CredentialSource(), r.client)
+	if err != nil {
+		return fmt.Errorf("load selected %s authority: %w; inspect contexts with `realmroot agent use %s` or request access with `realmroot agent request`", server.CommandName, err, server.CommandName)
+	}
+	if len(options.Scopes) > 0 {
+		binding, err = r.service.BindingForReferenceScopeAlternatives(server.ResourceURL, binding.Reference, [][]string{options.Scopes})
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return fmt.Errorf("the active %s authorization context has no approved authority for scopes %q; request exact access before retrying", server.CommandName, options.Scopes)
+			}
+			return err
+		}
+	}
+	broker, err := NewBroker(
+		server.ResourceURL,
+		binding.Reference,
+		binding.Scopes,
+		r.service.CredentialSource(),
+		func(reference string, alternatives [][]string) ([]string, error) {
+			resolved, err := r.service.BindingForReferenceScopeAlternatives(server.ResourceURL, reference, alternatives)
+			return resolved.Scopes, err
+		},
+		r.client,
+	)
 	if err != nil {
 		return err
 	}

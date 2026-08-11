@@ -20,6 +20,8 @@ make install
 realmroot agent enroll
 realmroot agent whoami
 realmroot agent request --resource-server github --scope contents:read
+realmroot agent use github
+realmroot agent use github --authorization-detail '{"type":"github_installation","installation_id":"152329382","account_login":"realmroot","target_type":"Organization","repository_selection":"all"}'
 realmroot toolbox
 realmroot toolbox github
 realmroot toolbox cloudflare --search "list zones"
@@ -34,6 +36,7 @@ realmroot exec
 realmroot exec github
 realmroot exec github -- git fetch origin
 realmroot exec github -- gh pr list --repo realmroot/realmroot
+realmroot exec github --scope contents:write -- gh pr merge 42 --repo realmroot/realmroot
 realmroot exec cloudflare -- wrangler deployments list --name realmroot-adapters
 ```
 
@@ -64,6 +67,18 @@ hide older approved offers in the same authorization context.
 `exec` consumes the exact active credential offer selected by the most recent
 access request or generated Toolbox operation; it never opens approval,
 requests access, or expands scopes.
+
+Use `realmroot agent use <resource-server>` to inspect approved authorization
+contexts and select one with `--authorization-detail`. This changes only the
+default account, installation, or other authorization context; it does not
+request access. Native REST, Git Smart HTTP, and Wrangler requests can follow a
+standard insufficient-scope challenge by switching to an already approved
+least-privileged offer in that same context. Use repeatable `realmroot exec
+--scope` flags when an opaque native protocol such as GraphQL does not advertise
+the operation scopes. An `exec --authorization-detail` value overrides the
+context only for that child process; persistent selection remains the
+responsibility of `agent use`. `exec` never switches authorization contexts or
+requests new authority automatically.
 
 `platform` is reserved and always maps to the Resource Server whose published
 identifier is `realmroot`. Resource Server names also cannot collide with the

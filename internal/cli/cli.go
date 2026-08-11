@@ -49,22 +49,22 @@ func New(stdout, stderr io.Writer) *cobra.Command {
 }
 
 func (a *App) execCommand() *cobra.Command {
-	return &cobra.Command{
+	command := &cobra.Command{
 		Use:   "exec [resource-server [-- native-command [args...]]]",
 		Short: "Run a native tool with approved Agent authority",
-		Long:  "Discover native commands advertised by Resource Servers, or run one with approved Agent authority. Run without arguments to list every available native command.",
+		Long:  "Discover native commands advertised by Resource Servers, or run one with approved Agent authority. Run without arguments to list every available native command. Use --scope to select an existing approved offer explicitly and --authorization-detail to select its approved account or installation.",
 		Example: strings.Join([]string{
 			"realmroot exec",
 			"realmroot exec github",
 			"realmroot exec github -- git fetch origin",
 			"realmroot exec github -- gh pr list",
+			`realmroot exec github --scope contents:write --authorization-detail '{"type":"github_installation","installation_id":"123"}' -- gh pr merge 42`,
 			"realmroot exec cloudflare -- wrangler deployments list",
 		}, "\n"),
 		DisableFlagParsing: true,
 		Args:               cobra.ArbitraryArgs,
 		RunE: func(command *cobra.Command, args []string) error {
-			var err error
-			args, err = a.parseExecFlags(args)
+			args, options, err := a.parseExecFlags(args)
 			if err != nil {
 				return err
 			}
@@ -76,6 +76,9 @@ func (a *App) execCommand() *cobra.Command {
 				return err
 			}
 			if len(args) == 0 {
+				if options.active() {
+					return errors.New("--scope and --authorization-detail require a Resource Server and native command")
+				}
 				return a.listNativeTools(command.Context(), catalogClient)
 			}
 			resourceServer := args[0]
@@ -91,6 +94,9 @@ func (a *App) execCommand() *cobra.Command {
 				return err
 			}
 			if len(args) == 1 || (len(args) == 2 && (args[1] == "--help" || args[1] == "-h")) {
+				if options.active() {
+					return errors.New("--scope and --authorization-detail require a native command")
+				}
 				return a.printNativeToolSummary(nativeToolSummary{
 					ResourceServer: server.CommandName,
 					Commands:       execution.NativeCommands(integrations),
@@ -103,34 +109,67 @@ func (a *App) execCommand() *cobra.Command {
 			if len(args) == 0 {
 				return errors.New("native command is required after --")
 			}
+			details, err := parseAuthorizationDetails(options.authorizationDetails)
+			if err != nil {
+				return err
+			}
 			runner := execution.NewRunner(service, httpClient, command.InOrStdin(), a.stdout, a.stderr)
-			return runner.Run(command.Context(), server, integrations, args)
+			return runner.Run(command.Context(), server, integrations, args, execution.RunOptions{
+				Scopes: options.scopes, AuthorizationDetails: details,
+			})
 		},
 	}
+	command.Flags().StringArray("scope", nil, "exact approved scope to use for the native command (repeatable)")
+	command.Flags().StringArray("authorization-detail", nil, "exact approved authorization detail JSON object to use (repeatable)")
+	return command
 }
 
-func (a *App) parseExecFlags(args []string) ([]string, error) {
+type execOptions struct {
+	scopes               []string
+	authorizationDetails []string
+}
+
+func (o execOptions) active() bool { return len(o.scopes) > 0 || len(o.authorizationDetails) > 0 }
+
+func (a *App) parseExecFlags(args []string) ([]string, execOptions, error) {
 	result := make([]string, 0, len(args))
+	var options execOptions
 	for index := 0; index < len(args); index++ {
 		argument := args[index]
 		switch {
 		case argument == "--":
-			return append(result, args[index:]...), nil
+			return append(result, args[index:]...), options, nil
 		case argument == "--json":
 			a.json = true
 		case argument == "--realmroot-origin":
 			if index+1 >= len(args) {
-				return nil, errors.New("--realmroot-origin requires a value")
+				return nil, execOptions{}, errors.New("--realmroot-origin requires a value")
 			}
 			index++
 			a.origin = args[index]
 		case strings.HasPrefix(argument, "--realmroot-origin="):
 			a.origin = strings.TrimPrefix(argument, "--realmroot-origin=")
+		case argument == "--scope":
+			if index+1 >= len(args) {
+				return nil, execOptions{}, errors.New("--scope requires a value")
+			}
+			index++
+			options.scopes = append(options.scopes, args[index])
+		case strings.HasPrefix(argument, "--scope="):
+			options.scopes = append(options.scopes, strings.TrimPrefix(argument, "--scope="))
+		case argument == "--authorization-detail":
+			if index+1 >= len(args) {
+				return nil, execOptions{}, errors.New("--authorization-detail requires a value")
+			}
+			index++
+			options.authorizationDetails = append(options.authorizationDetails, args[index])
+		case strings.HasPrefix(argument, "--authorization-detail="):
+			options.authorizationDetails = append(options.authorizationDetails, strings.TrimPrefix(argument, "--authorization-detail="))
 		default:
 			result = append(result, argument)
 		}
 	}
-	return result, nil
+	return result, options, nil
 }
 
 func (a *App) agentCommand() *cobra.Command {
@@ -139,7 +178,53 @@ func (a *App) agentCommand() *cobra.Command {
 		&cobra.Command{Use: "enroll", Short: "Enroll this Agent with controller approval", Args: cobra.NoArgs, RunE: a.enroll},
 		&cobra.Command{Use: "whoami", Short: "Print the current stable Agent identity", Args: cobra.NoArgs, RunE: a.whoami},
 		a.requestCommand(),
+		a.useCommand(),
 	)
+	return command
+}
+
+type authorizationContextResult struct {
+	ResourceServer        string                       `json:"resourceServer"`
+	AuthorizationContexts []agent.AuthorizationContext `json:"authorizationContexts"`
+}
+
+func (a *App) useCommand() *cobra.Command {
+	var authorizationDetails []string
+	command := &cobra.Command{
+		Use:   "use <resource-server>",
+		Short: "Inspect or select an approved authorization context",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(command *cobra.Command, args []string) error {
+			service, catalogClient, _, err := a.services()
+			if err != nil {
+				return err
+			}
+			server, err := catalogClient.Find(command.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			if len(authorizationDetails) > 0 {
+				details, err := parseAuthorizationDetails(authorizationDetails)
+				if err != nil {
+					return err
+				}
+				if _, err := service.SelectAuthorizationContext(server.ResourceURL, details); err != nil {
+					if errors.Is(err, os.ErrNotExist) {
+						return fmt.Errorf("Resource Server %q has no approved authority for that authorization detail", server.CommandName)
+					}
+					return err
+				}
+			}
+			contexts, err := service.AuthorizationContexts(server.ResourceURL)
+			if err != nil {
+				return err
+			}
+			return a.printAuthorizationContexts(authorizationContextResult{
+				ResourceServer: server.CommandName, AuthorizationContexts: contexts,
+			})
+		},
+	}
+	command.Flags().StringArrayVar(&authorizationDetails, "authorization-detail", nil, "exact approved authorization detail JSON object to select (repeatable)")
 	return command
 }
 
@@ -721,6 +806,30 @@ func (a *App) printJSON(value any) error {
 	encoder := json.NewEncoder(a.stdout)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(value)
+}
+
+func (a *App) printAuthorizationContexts(result authorizationContextResult) error {
+	if a.json {
+		return a.printJSON(result)
+	}
+	fmt.Fprintf(a.stdout, "Authorization contexts for %s:\n", result.ResourceServer)
+	if len(result.AuthorizationContexts) == 0 {
+		fmt.Fprintln(a.stdout, "  none approved")
+		return nil
+	}
+	for _, context := range result.AuthorizationContexts {
+		marker := " "
+		if context.Active {
+			marker = "*"
+		}
+		details, err := json.Marshal(context.AuthorizationDetails)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(a.stdout, "  %s %s\n", marker, details)
+		fmt.Fprintf(a.stdout, "    scopes: %s\n", strings.Join(context.Scopes, ", "))
+	}
+	return nil
 }
 
 func parseAuthorizationDetails(values []string) ([]map[string]any, error) {

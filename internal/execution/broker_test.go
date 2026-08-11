@@ -24,7 +24,7 @@ func TestNativeResourceToolUsesEphemeralDPoPBroker(t *testing.T) {
 	}))
 	defer upstream.Close()
 	source := &fakeSource{resource: upstream.URL}
-	broker, err := NewBroker(upstream.URL, "rrcs_reference", []string{"resource:read"}, source, upstream.Client())
+	broker, err := NewBroker(upstream.URL, "rrcs_reference", []string{"resource:read"}, source, nil, upstream.Client())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,6 +50,60 @@ func TestNativeResourceToolUsesEphemeralDPoPBroker(t *testing.T) {
 		t.Fatalf("upstream auth = %q, proof present = %t", authorization, proof != "")
 	}
 	if source.scopes != "resource:read" {
+		t.Fatalf("issued scopes = %q", source.scopes)
+	}
+}
+
+func TestNativeResourceToolRetriesAnInsufficientScopeChallengeWithExistingAuthority(t *testing.T) {
+	t.Parallel()
+	var requests int
+	var bodies []string
+	upstream := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		requests++
+		body, _ := io.ReadAll(request.Body)
+		bodies = append(bodies, string(body))
+		if requests == 1 {
+			response.Header().Set("WWW-Authenticate", `DPoP error="insufficient_scope", scope="resource:write"`)
+			response.WriteHeader(http.StatusForbidden)
+			return
+		}
+		response.WriteHeader(http.StatusNoContent)
+	}))
+	defer upstream.Close()
+	source := &fakeSource{resource: upstream.URL}
+	broker, err := NewBroker(
+		upstream.URL,
+		"rrcs_reference",
+		[]string{"resource:read"},
+		source,
+		func(reference string, alternatives [][]string) ([]string, error) {
+			if reference != "rrcs_reference" || len(alternatives) != 1 || strings.Join(alternatives[0], " ") != "resource:write" {
+				t.Fatalf("resolution = %q %#v", reference, alternatives)
+			}
+			return []string{"resource:write"}, nil
+		},
+		upstream.Client(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer broker.Close()
+	base, err := broker.StartTCP(func(request *http.Request) (string, error) { return request.URL.RequestURI(), nil }, func(*http.Request) bool { return true })
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.Post(base+"/items", "text/plain", strings.NewReader("payload"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusNoContent || requests != 2 {
+		t.Fatalf("status = %d, requests = %d", response.StatusCode, requests)
+	}
+	if len(bodies) != 2 || bodies[0] != "payload" || bodies[1] != "payload" {
+		t.Fatalf("bodies = %#v", bodies)
+	}
+	if source.scopes != "resource:write" {
 		t.Fatalf("issued scopes = %q", source.scopes)
 	}
 }
@@ -81,7 +135,7 @@ func TestCloudflareBrokerUsesCapturedAssetUploadCredentialOnlyForItsSession(t *t
 	}))
 	defer provider.Close()
 	source := &fakeSource{resource: adapter.URL}
-	broker, err := NewBroker(adapter.URL, "rrcs_reference", []string{"workers-scripts.write"}, source, adapter.Client())
+	broker, err := NewBroker(adapter.URL, "rrcs_reference", []string{"workers-scripts.write"}, source, nil, adapter.Client())
 	if err != nil {
 		t.Fatal(err)
 	}
