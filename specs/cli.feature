@@ -28,12 +28,15 @@ Feature: Realmroot Toolbox command line
     Then any required account connection is established or expanded for the requested authority
     And any required controller interaction is opened and polled
     And the resulting credential offer is stored without a target private key or access token
+    And the command returns only the ready authority without exposing the internal credential binding
 
   @journey:direct-resource-operation @entrypoint:toolbox-operation
   Scenario: Invoke an OpenAPI-generated Resource operation
     Given an approved credential offer is bound to the Resource Server
     When the Agent invokes the generated Toolbox operation
     Then Restish sends the request directly to the Resource Server with a proof-bound credential
+    And missing authority is reported using Realmroot Resource Server and scope vocabulary
+    But embedded engine profiles, credential bindings, and setup commands are never exposed
 
   @journey:native-resource-tool @entrypoint:exec
   Scenario: Run a native tool with approved Agent authority

@@ -20,10 +20,6 @@ type Receipt struct {
 	ResourceIndicator    string           `json:"resourceIndicator"`
 	Scopes               []string         `json:"scopes"`
 	AuthorizationDetails []map[string]any `json:"authorizationDetails,omitempty"`
-	CredentialSource     struct {
-		Name      string `json:"name"`
-		Reference string `json:"reference"`
-	} `json:"credentialSource"`
 }
 
 type Service struct {
@@ -112,7 +108,7 @@ func (s *Service) Request(ctx context.Context, server catalog.ResourceServer, sc
 			}
 			offer := polled.JSON200.CredentialOffer
 			authorization := mapsFromGetOffer(offer.AuthorizationDetails)
-			binding, err := s.agent.AcceptAccessOffer(agent.AccessOffer{
+			_, err := s.agent.AcceptAccessOffer(agent.AccessOffer{
 				AgentID: polled.JSON200.AgentId, Scopes: polled.JSON200.Scopes,
 				ResourceIndicator: offer.ResourceIndicator, AuthorizationDetails: authorization,
 				Endpoint: offer.Endpoint, ProofAlgorithm: string(offer.Proof.Algorithm),
@@ -121,7 +117,7 @@ func (s *Service) Request(ctx context.Context, server catalog.ResourceServer, sc
 			if err != nil {
 				return Receipt{}, fmt.Errorf("store approved credential offer: %w", err)
 			}
-			return receipt(server, offer.ResourceIndicator, polled.JSON200.Scopes, authorization, binding.Reference), nil
+			return receipt(server, offer.ResourceIndicator, polled.JSON200.Scopes, authorization), nil
 		}
 		if status != "pending" {
 			return Receipt{}, fmt.Errorf("controller access interaction %s", status)
@@ -132,7 +128,7 @@ func (s *Service) Request(ctx context.Context, server catalog.ResourceServer, sc
 	}
 	offer := current.CredentialOffer
 	authorization := mapsFromCreateOffer(offer.AuthorizationDetails)
-	binding, err := s.agent.AcceptAccessOffer(agent.AccessOffer{
+	_, err = s.agent.AcceptAccessOffer(agent.AccessOffer{
 		AgentID: current.AgentId, Scopes: current.Scopes, ResourceIndicator: offer.ResourceIndicator,
 		AuthorizationDetails: authorization, Endpoint: offer.Endpoint,
 		ProofAlgorithm: string(offer.Proof.Algorithm), ProofMethod: string(offer.Proof.Method), ProofURI: offer.Proof.Uri,
@@ -140,7 +136,7 @@ func (s *Service) Request(ctx context.Context, server catalog.ResourceServer, sc
 	if err != nil {
 		return Receipt{}, fmt.Errorf("store approved credential offer: %w", err)
 	}
-	return receipt(server, offer.ResourceIndicator, current.Scopes, authorization, binding.Reference), nil
+	return receipt(server, offer.ResourceIndicator, current.Scopes, authorization), nil
 }
 
 func (s *Service) connect(ctx context.Context, server catalog.ResourceServer, scopes []string, authorizationDetails []map[string]any, reason string) error {
@@ -281,11 +277,8 @@ func wait(ctx context.Context, duration time.Duration) error {
 	}
 }
 
-func receipt(server catalog.ResourceServer, resource string, scopes []string, details []map[string]any, reference string) Receipt {
-	value := Receipt{Status: "ready", ResourceServer: server.CommandName, ResourceIndicator: resource, Scopes: scopes, AuthorizationDetails: details}
-	value.CredentialSource.Name = "realmroot"
-	value.CredentialSource.Reference = reference
-	return value
+func receipt(server catalog.ResourceServer, resource string, scopes []string, details []map[string]any) Receipt {
+	return Receipt{Status: "ready", ResourceServer: server.CommandName, ResourceIndicator: resource, Scopes: scopes, AuthorizationDetails: details}
 }
 
 func apiError(operation string, status int, body []byte) error {

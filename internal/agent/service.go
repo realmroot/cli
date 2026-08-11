@@ -185,19 +185,10 @@ func (s *Service) AcceptAccessOffer(offer AccessOffer) (CredentialBinding, error
 	credential.Proof.Algorithm = offer.ProofAlgorithm
 	credential.Proof.Method = offer.ProofMethod
 	credential.Proof.URI = offer.ProofURI
-	output, err := acceptCredentialOffer(resource, credential, s.origin, s.states, newCredentialSourceReference)
+	_, reference, err := acceptCredentialOfferWithReference(resource, credential, s.origin, s.states, newCredentialSourceReference)
 	if err != nil {
 		return CredentialBinding{}, err
 	}
-	body, ok := output.Response.Body.(map[string]any)
-	if !ok {
-		return CredentialBinding{}, errors.New("stored credential receipt is invalid")
-	}
-	source, ok := body["credentialSource"].(map[string]any)
-	if !ok {
-		return CredentialBinding{}, errors.New("stored credential source is invalid")
-	}
-	reference, _ := source["reference"].(string)
 	if reference == "" {
 		return CredentialBinding{}, errors.New("stored credential source reference is missing")
 	}

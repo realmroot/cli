@@ -460,13 +460,38 @@ func (a *App) discoveryOptions() discoveryOptions {
 }
 
 func (a *App) runRestish(ctx context.Context, service *agent.Service, client *catalog.Client, args []string) error {
-	config, _, err := client.RestishConfig(ctx)
+	config, servers, err := client.RestishConfig(ctx)
 	if err != nil {
 		return err
 	}
 	runtime, err := a.newRestishRuntime(service, config)
 	if err != nil {
 		return err
+	}
+	if server, ok := selectedResourceServer(servers, args); ok {
+		profile := a.profile
+		if profile == "" {
+			profile = "default"
+		}
+		inspection, inspectErr := runtime.InspectAPI(ctx, server.CommandName, profile)
+		if inspectErr != nil {
+			return inspectErr
+		}
+		var binding *agent.CredentialBinding
+		resolved, bindErr := service.BindingForResource(server.ResourceURL)
+		switch {
+		case bindErr == nil:
+			binding = &resolved
+		case !errors.Is(bindErr, os.ErrNotExist):
+			return fmt.Errorf("load Agent authority for %s: %w", server.CommandName, bindErr)
+		}
+		if err := prepareOperationCredentials(config, server, inspection, args[1:], profile, binding); err != nil {
+			return err
+		}
+		runtime, err = a.newRestishRuntime(service, config)
+		if err != nil {
+			return err
+		}
 	}
 	argvArgs := append([]string(nil), args...)
 	if !hasRuntimeFlag(argvArgs, "--rsh-print") {

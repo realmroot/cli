@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/realmroot/toolbox/internal/agent"
 	"github.com/realmroot/toolbox/internal/catalog"
 	restish "github.com/saltbo/restish/v2"
 )
@@ -93,6 +94,78 @@ func TestToolboxRuntimeErrorUsesProductVocabulary(t *testing.T) {
 	if got := err.Error(); got != "Toolbox rejected --output in toolbox config" {
 		t.Fatalf("error = %q", got)
 	}
+}
+
+func TestPrepareOperationCredentialsBindsOpenAPICredentialID(t *testing.T) {
+	config := &restish.Config{APIs: map[string]*restish.APIConfig{
+		"github": {Profiles: map[string]*restish.ProfileConfig{
+			"default": {Auth: &restish.AuthConfig{Type: "dpop", Params: map[string]string{"source": "realmroot", "reference": "internal-reference"}}},
+		}},
+	}}
+	inspection := githubOperationInspection()
+	binding := &agent.CredentialBinding{Reference: "internal-reference", Scopes: []string{"issues:read"}}
+
+	if err := prepareOperationCredentials(config, catalog.ResourceServer{CommandName: "github"}, inspection, []string{"issues", "issues-get", "realmroot", "toolbox"}, "default", binding); err != nil {
+		t.Fatal(err)
+	}
+	profile := config.APIs["github"].Profiles["default"]
+	credential := profile.Credentials["realmrootOidc"]
+	if profile.Auth != nil || credential == nil || credential.Auth == nil || credential.Auth.Type != "dpop" {
+		t.Fatalf("profile = %#v", profile)
+	}
+	if strings.Join(credential.Satisfies, " ") != "issues:read" {
+		t.Fatalf("credential scopes = %#v", credential.Satisfies)
+	}
+}
+
+func TestMissingOperationAuthorityUsesOnlyProductVocabulary(t *testing.T) {
+	err := prepareOperationCredentials(
+		&restish.Config{APIs: map[string]*restish.APIConfig{"github": {}}},
+		catalog.ResourceServer{CommandName: "github"},
+		githubOperationInspection(),
+		[]string{"issues", "issues-get", "realmroot", "toolbox"},
+		"default",
+		nil,
+	)
+	if err == nil {
+		t.Fatal("missing Agent authority was accepted")
+	}
+	message := err.Error()
+	for _, expected := range []string{"Resource Server \"github\"", "issues:read OR metadata:read", "realmroot agent request"} {
+		if !strings.Contains(message, expected) {
+			t.Fatalf("error omitted %q: %s", expected, message)
+		}
+	}
+	for _, internal := range []string{"profile", "credential binding", "realmrootOidc", "auth add", "Restish"} {
+		if strings.Contains(message, internal) {
+			t.Fatalf("error exposes %q: %s", internal, message)
+		}
+	}
+}
+
+func TestInsufficientOperationAuthorityReportsActiveAndRequiredScopes(t *testing.T) {
+	binding := &agent.CredentialBinding{Reference: "internal-reference", Scopes: []string{"contents:read"}}
+	err := prepareOperationCredentials(
+		&restish.Config{APIs: map[string]*restish.APIConfig{"github": {}}},
+		catalog.ResourceServer{CommandName: "github"},
+		githubOperationInspection(),
+		[]string{"issues", "issues-get"},
+		"default",
+		binding,
+	)
+	if err == nil || !strings.Contains(err.Error(), "active scopes: contents:read") || !strings.Contains(err.Error(), "required scopes: issues:read OR metadata:read") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func githubOperationInspection() restish.APIInspection {
+	return restish.APIInspection{Operations: []restish.OperationInspection{{
+		ID: "issuesGet", Command: []string{"issues", "issues-get"}, Method: "GET", Path: "/repos/{owner}/{repo}/issues/{number}",
+		CredentialAlternatives: [][]restish.CredentialRequirementInspection{
+			{{ID: "realmrootOidc", Kind: "oauth2-dpop", Needs: []string{"issues:read"}}},
+			{{ID: "realmrootOidc", Kind: "oauth2-dpop", Needs: []string{"metadata:read"}}},
+		},
+	}}}
 }
 
 func TestServicesUseBoundedHTTPClient(t *testing.T) {
