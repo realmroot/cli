@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -41,6 +42,13 @@ type AccessOffer struct {
 type CredentialBinding struct {
 	Reference string
 	Scopes    []string
+}
+
+var ErrAuthorizationContextAmbiguous = errors.New("multiple authorization contexts can satisfy the operation")
+
+type resourceCredentialSource struct {
+	reference string
+	source    credentialSource
 }
 
 type Service struct {
@@ -185,19 +193,10 @@ func (s *Service) AcceptAccessOffer(offer AccessOffer) (CredentialBinding, error
 	credential.Proof.Algorithm = offer.ProofAlgorithm
 	credential.Proof.Method = offer.ProofMethod
 	credential.Proof.URI = offer.ProofURI
-	output, err := acceptCredentialOffer(resource, credential, s.origin, s.states, newCredentialSourceReference)
+	_, reference, err := acceptCredentialOfferWithReference(resource, credential, s.origin, s.states, newCredentialSourceReference)
 	if err != nil {
 		return CredentialBinding{}, err
 	}
-	body, ok := output.Response.Body.(map[string]any)
-	if !ok {
-		return CredentialBinding{}, errors.New("stored credential receipt is invalid")
-	}
-	source, ok := body["credentialSource"].(map[string]any)
-	if !ok {
-		return CredentialBinding{}, errors.New("stored credential source is invalid")
-	}
-	reference, _ := source["reference"].(string)
 	if reference == "" {
 		return CredentialBinding{}, errors.New("stored credential source reference is missing")
 	}
@@ -208,54 +207,159 @@ func (s *Service) AcceptAccessOffer(offer AccessOffer) (CredentialBinding, error
 }
 
 func (s *Service) BindingForResource(resourceIndicator string) (CredentialBinding, error) {
-	runtimeName, err := agentRuntime()
+	sources, err := s.credentialSourcesForResource(resourceIndicator)
 	if err != nil {
 		return CredentialBinding{}, err
 	}
-	var binding *CredentialBinding
 	active, activeErr := s.activeBinding(resourceIndicator)
 	if activeErr != nil && !errors.Is(activeErr, os.ErrNotExist) {
 		return CredentialBinding{}, activeErr
 	}
+	for _, source := range sources {
+		if source.reference == active.Reference {
+			return bindingForSource(source), nil
+		}
+	}
+	if len(sources) == 0 {
+		return CredentialBinding{}, os.ErrNotExist
+	}
+	if len(sources) > 1 {
+		return CredentialBinding{}, fmt.Errorf("%w for Resource Server %q", ErrAuthorizationContextAmbiguous, resourceIndicator)
+	}
+	binding := bindingForSource(sources[0])
+	if err := s.storeActiveBinding(resourceIndicator, binding); err != nil {
+		return CredentialBinding{}, err
+	}
+	return binding, nil
+}
+
+func (s *Service) ActiveBindingForResource(resourceIndicator string) (CredentialBinding, error) {
+	active, err := s.activeBinding(resourceIndicator)
+	if err != nil {
+		return CredentialBinding{}, err
+	}
+	sources, err := s.credentialSourcesForResource(resourceIndicator)
+	if err != nil {
+		return CredentialBinding{}, err
+	}
+	for _, source := range sources {
+		if source.reference != active.Reference {
+			continue
+		}
+		if len(active.Scopes) > 0 {
+			offer, ok := leastPrivilegeOffer(source.source.Offers, [][]string{active.Scopes})
+			if !ok {
+				return CredentialBinding{}, os.ErrNotExist
+			}
+			return CredentialBinding{Reference: source.reference, Scopes: normalizedBindingScopes(offer.Scopes)}, nil
+		}
+		if len(source.source.Offers) == 1 {
+			return CredentialBinding{
+				Reference: source.reference,
+				Scopes:    normalizedBindingScopes(source.source.Offers[0].Scopes),
+			}, nil
+		}
+		return CredentialBinding{}, errors.New("active Resource Server authority does not identify one credential offer")
+	}
+	return CredentialBinding{}, os.ErrNotExist
+}
+
+func (s *Service) BindingForScopeAlternatives(resourceIndicator string, alternatives [][]string) (CredentialBinding, error) {
+	sources, err := s.credentialSourcesForResource(resourceIndicator)
+	if err != nil {
+		return CredentialBinding{}, err
+	}
+	candidates := make([]CredentialBinding, 0, len(sources))
+	for _, source := range sources {
+		offer, ok := leastPrivilegeOffer(source.source.Offers, alternatives)
+		if ok {
+			candidates = append(candidates, CredentialBinding{
+				Reference: source.reference,
+				Scopes:    normalizedBindingScopes(offer.Scopes),
+			})
+		}
+	}
+	if len(candidates) == 0 {
+		return CredentialBinding{}, os.ErrNotExist
+	}
+	active, activeErr := s.activeBinding(resourceIndicator)
+	if activeErr != nil && !errors.Is(activeErr, os.ErrNotExist) {
+		return CredentialBinding{}, activeErr
+	}
+	for _, candidate := range candidates {
+		if candidate.Reference == active.Reference {
+			if !sameStringSet(candidate.Scopes, active.Scopes) {
+				if err := s.storeActiveBinding(resourceIndicator, candidate); err != nil {
+					return CredentialBinding{}, err
+				}
+			}
+			return candidate, nil
+		}
+	}
+	if len(candidates) > 1 {
+		return CredentialBinding{}, fmt.Errorf("%w for Resource Server %q", ErrAuthorizationContextAmbiguous, resourceIndicator)
+	}
+	if err := s.storeActiveBinding(resourceIndicator, candidates[0]); err != nil {
+		return CredentialBinding{}, err
+	}
+	return candidates[0], nil
+}
+
+func (s *Service) credentialSourcesForResource(resourceIndicator string) ([]resourceCredentialSource, error) {
+	runtimeName, err := agentRuntime()
+	if err != nil {
+		return nil, err
+	}
+	sources := make([]resourceCredentialSource, 0)
 	err = s.states.walkStates(func(_ string, state agentState) error {
 		if state.Runtime != runtimeName || state.Origin != s.origin {
 			return nil
 		}
 		for reference, source := range state.CredentialSources {
-			if source.ResourceIndicator != resourceIndicator {
-				continue
+			if source.ResourceIndicator == resourceIndicator && len(source.Offers) > 0 {
+				sources = append(sources, resourceCredentialSource{reference: reference, source: source})
 			}
-			if active.Reference != "" && reference != active.Reference {
-				continue
-			}
-			if len(source.Offers) == 0 {
-				continue
-			}
-			if binding != nil && binding.Reference != reference {
-				return errors.New("multiple authorization contexts exist for this Resource Server")
-			}
-			scopes := append([]string(nil), active.Scopes...)
-			for _, offer := range source.Offers {
-				if len(active.Scopes) == 0 {
-					scopes = append(scopes, offer.Scopes...)
-				}
-			}
-			binding = &CredentialBinding{Reference: reference, Scopes: uniqueStrings(scopes)}
 		}
 		return nil
 	})
 	if err != nil {
-		return CredentialBinding{}, err
+		return nil, err
 	}
-	if binding == nil {
-		return CredentialBinding{}, os.ErrNotExist
+	sort.Slice(sources, func(left, right int) bool { return sources[left].reference < sources[right].reference })
+	return sources, nil
+}
+
+func bindingForSource(source resourceCredentialSource) CredentialBinding {
+	scopes := make([]string, 0)
+	for _, offer := range source.source.Offers {
+		scopes = append(scopes, offer.Scopes...)
 	}
-	if active.Reference == "" {
-		if err := s.storeActiveBinding(resourceIndicator, *binding); err != nil {
-			return CredentialBinding{}, err
+	return CredentialBinding{Reference: source.reference, Scopes: normalizedBindingScopes(scopes)}
+}
+
+func leastPrivilegeOffer(offers []dpopCredential, alternatives [][]string) (dpopCredential, bool) {
+	var selected *dpopCredential
+	for index := range offers {
+		for _, scopes := range alternatives {
+			if len(scopes) == 0 || !scopesContain(offers[index].Scopes, scopes) {
+				continue
+			}
+			if selected == nil || len(offers[index].Scopes) < len(selected.Scopes) {
+				candidate := offers[index]
+				selected = &candidate
+			}
 		}
 	}
-	return *binding, nil
+	if selected == nil {
+		return dpopCredential{}, false
+	}
+	return *selected, true
+}
+
+func normalizedBindingScopes(scopes []string) []string {
+	result := uniqueStrings(scopes)
+	sort.Strings(result)
+	return result
 }
 
 type activeBindings struct {
@@ -332,7 +436,7 @@ func (s *Service) storeActiveBinding(resourceIndicator string, binding Credentia
 	if bindings.Items == nil {
 		bindings.Items = make(map[string]activeCredentialBinding)
 	}
-	bindings.Items[resourceIndicator] = activeCredentialBinding{Reference: binding.Reference, Scopes: uniqueStrings(binding.Scopes)}
+	bindings.Items[resourceIndicator] = activeCredentialBinding{Reference: binding.Reference, Scopes: normalizedBindingScopes(binding.Scopes)}
 	data, err := json.MarshalIndent(bindings, "", "  ")
 	if err != nil {
 		return err

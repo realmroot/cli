@@ -27,7 +27,6 @@ type App struct {
 	origin    string
 	json      bool
 	noBrowser bool
-	profile   string
 	search    string
 	scope     string
 	all       bool
@@ -51,18 +50,52 @@ func New(stdout, stderr io.Writer) *cobra.Command {
 
 func (a *App) execCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:                "exec <resource-server> -- <native-command> [args...]",
-		Short:              "Run a native tool with approved Agent authority",
+		Use:   "exec [resource-server [-- native-command [args...]]]",
+		Short: "Run a native tool with approved Agent authority",
+		Long:  "Discover native commands advertised by Resource Servers, or run one with approved Agent authority. Run without arguments to list every available native command.",
+		Example: strings.Join([]string{
+			"realmroot exec",
+			"realmroot exec github",
+			"realmroot exec github -- git fetch origin",
+			"realmroot exec github -- gh pr list",
+			"realmroot exec cloudflare -- wrangler deployments list",
+		}, "\n"),
 		DisableFlagParsing: true,
 		Args:               cobra.ArbitraryArgs,
 		RunE: func(command *cobra.Command, args []string) error {
+			var err error
+			args, err = a.parseExecFlags(args)
+			if err != nil {
+				return err
+			}
 			if len(args) == 1 && (args[0] == "--help" || args[0] == "-h") {
 				return command.Help()
 			}
-			if len(args) < 2 {
-				return errors.New("usage: realmroot exec <resource-server> -- <native-command> [args...]")
+			service, catalogClient, httpClient, err := a.services()
+			if err != nil {
+				return err
+			}
+			if len(args) == 0 {
+				return a.listNativeTools(command.Context(), catalogClient)
 			}
 			resourceServer := args[0]
+			server, err := catalogClient.Find(command.Context(), resourceServer)
+			if err != nil {
+				return err
+			}
+			integrations, err := catalogClient.ToolIntegrations(command.Context(), server)
+			if err != nil {
+				if len(args) == 1 && errors.Is(err, catalog.ErrNoToolIntegrations) {
+					return a.printNativeToolSummary(nativeToolSummary{ResourceServer: server.CommandName})
+				}
+				return err
+			}
+			if len(args) == 1 || (len(args) == 2 && (args[1] == "--help" || args[1] == "-h")) {
+				return a.printNativeToolSummary(nativeToolSummary{
+					ResourceServer: server.CommandName,
+					Commands:       execution.NativeCommands(integrations),
+				})
+			}
 			args = args[1:]
 			if args[0] == "--" {
 				args = args[1:]
@@ -70,22 +103,34 @@ func (a *App) execCommand() *cobra.Command {
 			if len(args) == 0 {
 				return errors.New("native command is required after --")
 			}
-			service, catalogClient, httpClient, err := a.services()
-			if err != nil {
-				return err
-			}
-			server, err := catalogClient.Find(command.Context(), resourceServer)
-			if err != nil {
-				return err
-			}
-			integrations, err := catalogClient.ToolIntegrations(command.Context(), server)
-			if err != nil {
-				return err
-			}
 			runner := execution.NewRunner(service, httpClient, command.InOrStdin(), a.stdout, a.stderr)
 			return runner.Run(command.Context(), server, integrations, args)
 		},
 	}
+}
+
+func (a *App) parseExecFlags(args []string) ([]string, error) {
+	result := make([]string, 0, len(args))
+	for index := 0; index < len(args); index++ {
+		argument := args[index]
+		switch {
+		case argument == "--":
+			return append(result, args[index:]...), nil
+		case argument == "--json":
+			a.json = true
+		case argument == "--realmroot-origin":
+			if index+1 >= len(args) {
+				return nil, errors.New("--realmroot-origin requires a value")
+			}
+			index++
+			a.origin = args[index]
+		case strings.HasPrefix(argument, "--realmroot-origin="):
+			a.origin = strings.TrimPrefix(argument, "--realmroot-origin=")
+		default:
+			result = append(result, argument)
+		}
+	}
+	return result, nil
 }
 
 func (a *App) agentCommand() *cobra.Command {
@@ -179,15 +224,13 @@ func (a *App) toolboxCommand() *cobra.Command {
 			return a.runRestish(ctx, agentService, catalogClient, args)
 		},
 	}
-	command.Flags().String("output", "auto", "response format: auto, json, yaml, table, raw, or another supported formatter")
-	command.Flags().String("print", "auto", "response parts to print")
+	command.Flags().String("output", "auto", "response format: auto, json, yaml, table, or raw")
 	command.Flags().StringArray("header", nil, `request header in "Name: Value" format (repeatable)`)
 	command.Flags().StringArray("query", nil, `query parameter in "key=value" format (repeatable)`)
 	command.Flags().String("filter", "", "filter or project the response")
 	command.Flags().String("content-type", "", "request body content type")
 	command.Flags().String("timeout", "", "request timeout, such as 30s")
-	command.Flags().String("profile", "", "Resource Server profile")
-	command.Flags().String("auth", "", "explicit OpenAPI security alternative")
+	command.Flags().Bool("include", false, "include response headers")
 	command.Flags().String("search", "", "find operations by command, summary, method, path, or operation ID")
 	command.Flags().String("scope", "", "find operations requiring an exact scope")
 	command.Flags().Bool("all", false, "show the complete Resource Server inventory")
@@ -207,11 +250,10 @@ func (a *App) parseToolboxFlags(args []string) ([]string, error) {
 	result := make([]string, 0, len(args))
 	positionals := 0
 	valueFlags := map[string]string{
-		"--output": "--rsh-output-format", "--print": "--rsh-print", "--header": "--rsh-header",
+		"--output": "--rsh-output-format", "--header": "--rsh-header",
 		"--query": "--rsh-query", "--filter": "--rsh-filter", "--timeout": "--rsh-timeout",
 		"--content-type": "--rsh-content-type",
-		"--profile":      "--rsh-profile", "--auth": "--rsh-auth", "--max-pages": "--rsh-max-pages",
-		"--max-items": "--rsh-max-items", "--retry": "--rsh-retry",
+		"--max-pages":    "--rsh-max-pages", "--max-items": "--rsh-max-items", "--retry": "--rsh-retry",
 	}
 	booleanFlags := map[string]string{
 		"--no-browser": "--rsh-no-browser", "--no-paginate": "--rsh-no-paginate", "--no-cache": "--rsh-no-cache",
@@ -219,6 +261,9 @@ func (a *App) parseToolboxFlags(args []string) ([]string, error) {
 	}
 	for index := 0; index < len(args); index++ {
 		argument := args[index]
+		if strings.HasPrefix(argument, "--rsh-") {
+			return nil, fmt.Errorf("unsupported internal option %q", argument)
+		}
 		switch argument {
 		case "--":
 			return append(result, args[index:]...), nil
@@ -253,16 +298,19 @@ func (a *App) parseToolboxFlags(args []string) ([]string, error) {
 			}
 			index++
 			a.origin = args[index]
+		case "--profile", "-p", "--auth", "--print":
+			if positionals <= 1 {
+				return nil, fmt.Errorf("unsupported Toolbox option %q", argument)
+			}
+			result = append(result, argument)
 		case "--verbose", "-v":
 			result = append(result, "--rsh-verbose")
-		case "-p":
-			if index+1 >= len(args) {
-				return nil, errors.New("-p requires a value")
-			}
-			index++
-			a.profile = args[index]
-			result = append(result, "--rsh-profile", a.profile)
+		case "--include":
+			result = append(result, "--rsh-print", "hb")
 		default:
+			if positionals <= 1 && removedToolboxOption(argument) {
+				return nil, fmt.Errorf("unsupported Toolbox option %q", strings.SplitN(argument, "=", 2)[0])
+			}
 			if positionals <= 1 && strings.HasPrefix(argument, "--search=") {
 				a.search = strings.TrimPrefix(argument, "--search=")
 				if strings.TrimSpace(a.search) == "" {
@@ -289,9 +337,6 @@ func (a *App) parseToolboxFlags(args []string) ([]string, error) {
 					return nil, fmt.Errorf("%s requires a value", argument)
 				}
 				index++
-				if argument == "--profile" {
-					a.profile = args[index]
-				}
 				result = append(result, internal, args[index])
 				continue
 			}
@@ -299,9 +344,6 @@ func (a *App) parseToolboxFlags(args []string) ([]string, error) {
 			for public, internal := range valueFlags {
 				if strings.HasPrefix(argument, public+"=") {
 					value := strings.TrimPrefix(argument, public+"=")
-					if public == "--profile" {
-						a.profile = value
-					}
 					result = append(result, internal+"="+value)
 					translated = true
 					break
@@ -316,6 +358,15 @@ func (a *App) parseToolboxFlags(args []string) ([]string, error) {
 		}
 	}
 	return result, nil
+}
+
+func removedToolboxOption(argument string) bool {
+	for _, option := range []string{"--profile", "--auth", "--print"} {
+		if strings.HasPrefix(argument, option+"=") {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *App) enroll(command *cobra.Command, _ []string) error {
@@ -388,6 +439,17 @@ func (a *App) showResourceServer(ctx context.Context, service *agent.Service, cl
 		return err
 	}
 	overview := buildResourceServerOverview(server, details, inspection.Operations, a.discoveryOptions())
+	integrations, integrationsErr := client.ToolIntegrations(ctx, server)
+	if integrationsErr == nil {
+		overview.NativeCommands = execution.NativeCommands(integrations)
+	} else if !errors.Is(integrationsErr, catalog.ErrNoToolIntegrations) {
+		return integrationsErr
+	}
+	if binding, bindErr := service.BindingForResource(server.ResourceURL); bindErr == nil {
+		overview.ResourceServer.AgentAuthorityScopes = append([]string(nil), binding.Scopes...)
+	} else if !errors.Is(bindErr, os.ErrNotExist) {
+		return fmt.Errorf("load Agent authority for %s: %w", server.CommandName, bindErr)
+	}
 	if a.json {
 		return a.printJSON(overview)
 	}
@@ -396,24 +458,34 @@ func (a *App) showResourceServer(ctx context.Context, service *agent.Service, cl
 
 func (a *App) printResourceServerOverview(overview resourceServerOverview) error {
 	server := overview.ResourceServer
-	fmt.Fprintf(a.stdout, "Resource Server: %s (%s)\nName: %s\nResource: %s\nConnection: %s\n", server.CommandName, server.Identifier, server.Name, server.ResourceURL, server.ConnectionStatus)
-	if len(server.AuthorizedScopes) > 0 {
-		fmt.Fprintf(a.stdout, "Authorized scopes: %s\n", strings.Join(server.AuthorizedScopes, ", "))
+	serverLabel := server.CommandName
+	if server.CommandName != server.Identifier {
+		serverLabel += " (" + server.Identifier + ")"
 	}
+	fmt.Fprintf(a.stdout, "Resource Server: %s\nName: %s\nResource: %s\nConnection: %s\n", serverLabel, server.Name, server.ResourceURL, server.ConnectionStatus)
+	if len(server.ConnectedAccountScopes) > 0 {
+		fmt.Fprintf(a.stdout, "Connected account scopes: %s\n", scopeList(server.ConnectedAccountScopes, overview.Mode == overviewModeExpanded))
+	}
+	if len(server.AgentAuthorityScopes) > 0 {
+		fmt.Fprintf(a.stdout, "Agent authority scopes: %s\n", strings.Join(server.AgentAuthorityScopes, ", "))
+	} else {
+		fmt.Fprintln(a.stdout, "Agent authority: not requested")
+	}
+	a.printNativeCommands(server.CommandName, overview.NativeCommands)
 	if overview.Mode == overviewModeCompact {
-		fmt.Fprintf(a.stdout, "\nCapabilities:\n  Operations: %d\n  Requestable scopes: %d\n  Authorization details: %d\n", overview.OperationCount, overview.ScopeCount, overview.AuthorizationDetailCount)
-		fmt.Fprintf(a.stdout, "\nFind operations:\n  realmroot toolbox %s --search \"list zones\"\n  realmroot toolbox %s --scope zone.read\n  realmroot toolbox %s --all\n", server.CommandName, server.CommandName, server.CommandName)
+		fmt.Fprintf(a.stdout, "\nCapabilities:\n  Operations: %d\n  Published scopes: %d\n  Authorization details: %d\n", overview.OperationCount, overview.ScopeCount, overview.AuthorizationDetailCount)
+		a.printAuthorizationDetails(overview)
+		fmt.Fprintf(a.stdout, "\nDiscover operations:\n  realmroot toolbox %s --search \"<keywords>\"\n  realmroot toolbox %s --scope <scope>\n  realmroot toolbox %s --all\n", server.CommandName, server.CommandName, server.CommandName)
 		return nil
 	}
 	if overview.Mode == overviewModeExpanded {
-		fmt.Fprintln(a.stdout, "\nScopes:")
-		for _, scope := range overview.Scopes {
-			fmt.Fprintf(a.stdout, "  %-28s %s\n", scope.Value, scope.Description)
+		if len(overview.Scopes) > 0 {
+			fmt.Fprintln(a.stdout, "\nScopes:")
+			for _, scope := range overview.Scopes {
+				fmt.Fprintf(a.stdout, "  %-28s %s\n", scope.Value, scope.Description)
+			}
 		}
-		fmt.Fprintln(a.stdout, "\nAuthorization details:")
-		for _, detail := range overview.AuthorizationDetails {
-			fmt.Fprintf(a.stdout, "  %s\n    account: %s\n    authorized: %s\n    requestable: %s\n", detail.Name, detail.AccountAuthorizationStatus, strings.Join(detail.AuthorizedScopes, ", "), strings.Join(detail.RequestableScopes, ", "))
-		}
+		a.printAuthorizationDetails(overview)
 	} else {
 		fmt.Fprintf(a.stdout, "\nMatching operations: %d\n", overview.MatchCount)
 	}
@@ -455,18 +527,122 @@ func (a *App) printResourceServerOverview(overview resourceServerOverview) error
 	return nil
 }
 
+func (a *App) listNativeTools(ctx context.Context, client *catalog.Client) error {
+	servers, err := client.List(ctx)
+	if err != nil {
+		return err
+	}
+	summaries := make([]nativeToolSummary, 0)
+	for _, server := range servers {
+		integrations, integrationsErr := client.ToolIntegrations(ctx, server)
+		if errors.Is(integrationsErr, catalog.ErrNoToolIntegrations) {
+			continue
+		}
+		if integrationsErr != nil {
+			return integrationsErr
+		}
+		summaries = append(summaries, nativeToolSummary{
+			ResourceServer: server.CommandName,
+			Commands:       execution.NativeCommands(integrations),
+		})
+	}
+	if a.json {
+		return a.printJSON(summaries)
+	}
+	if len(summaries) == 0 {
+		fmt.Fprintln(a.stdout, "No Resource Servers advertise native commands.")
+		return nil
+	}
+	w := tabwriter.NewWriter(a.stdout, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(w, "RESOURCE SERVER\tCOMMANDS")
+	for _, summary := range summaries {
+		fmt.Fprintf(w, "%s\t%s\n", summary.ResourceServer, strings.Join(summary.Commands, ", "))
+	}
+	return w.Flush()
+}
+
+func (a *App) printNativeToolSummary(summary nativeToolSummary) error {
+	if a.json {
+		return a.printJSON(summary)
+	}
+	if len(summary.Commands) == 0 {
+		fmt.Fprintf(a.stdout, "Resource Server %q does not advertise native commands.\n", summary.ResourceServer)
+		return nil
+	}
+	fmt.Fprintf(a.stdout, "Native commands for %s:\n", summary.ResourceServer)
+	for _, nativeCommand := range summary.Commands {
+		fmt.Fprintf(a.stdout, "  realmroot exec %s -- %s <arguments>\n", summary.ResourceServer, nativeCommand)
+	}
+	return nil
+}
+
+func (a *App) printNativeCommands(resourceServer string, commands []string) {
+	if len(commands) == 0 {
+		return
+	}
+	fmt.Fprintln(a.stdout, "\nNative commands:")
+	for _, nativeCommand := range commands {
+		fmt.Fprintf(a.stdout, "  realmroot exec %s -- %s <arguments>\n", resourceServer, nativeCommand)
+	}
+}
+
 func (a *App) discoveryOptions() discoveryOptions {
 	return discoveryOptions{Search: strings.TrimSpace(a.search), Scope: strings.TrimSpace(a.scope), All: a.all}
 }
 
+func (a *App) printAuthorizationDetails(overview resourceServerOverview) {
+	if len(overview.AuthorizationDetails) == 0 {
+		return
+	}
+	fmt.Fprintln(a.stdout, "\nAuthorization details:")
+	for _, detail := range overview.AuthorizationDetails {
+		encoded, _ := json.Marshal(detail.AuthorizationDetail)
+		fmt.Fprintf(a.stdout, "  %s\n    account: %s\n    request: %s\n", detail.Name, detail.AccountAuthorizationStatus, encoded)
+		if len(detail.AuthorizedScopes) > 0 {
+			fmt.Fprintf(a.stdout, "    authorized Agent scopes: %s\n", strings.Join(detail.AuthorizedScopes, ", "))
+		}
+		if len(detail.RequestableScopes) > 0 {
+			fmt.Fprintf(a.stdout, "    requestable scopes: %s\n", strings.Join(detail.RequestableScopes, ", "))
+		}
+	}
+	if overview.AuthorizationTruncated {
+		fmt.Fprintf(a.stdout, "  Showing %d of %d authorization details. Add --all to show every detail.\n", len(overview.AuthorizationDetails), overview.AuthorizationDetailCount)
+	}
+}
+
+func scopeList(scopes []string, expanded bool) string {
+	if expanded || len(scopes) <= 12 {
+		return strings.Join(scopes, ", ")
+	}
+	return fmt.Sprintf("%d available (add --all to list them)", len(scopes))
+}
+
 func (a *App) runRestish(ctx context.Context, service *agent.Service, client *catalog.Client, args []string) error {
-	config, _, err := client.RestishConfig(ctx)
+	config, servers, err := client.RestishConfig(ctx)
 	if err != nil {
 		return err
 	}
 	runtime, err := a.newRestishRuntime(service, config)
 	if err != nil {
 		return err
+	}
+	if server, ok := selectedResourceServer(servers, args); ok {
+		profile := "default"
+		inspection, inspectErr := runtime.InspectAPI(ctx, server.CommandName, profile)
+		if inspectErr != nil {
+			return inspectErr
+		}
+		binding, bindingErr := resolveOperationCredentialBinding(service, server, inspection, args[1:])
+		if bindingErr != nil {
+			return bindingErr
+		}
+		if err := prepareOperationCredentials(config, server, inspection, args[1:], profile, binding); err != nil {
+			return err
+		}
+		runtime, err = a.newRestishRuntime(service, config)
+		if err != nil {
+			return err
+		}
 	}
 	argvArgs := append([]string(nil), args...)
 	if !hasRuntimeFlag(argvArgs, "--rsh-print") {
@@ -495,9 +671,9 @@ type toolboxRuntimeError struct{ cause error }
 
 func (e toolboxRuntimeError) Error() string {
 	replacer := strings.NewReplacer(
-		"--rsh-output-format", "--output", "--rsh-print", "--print", "--rsh-header", "--header",
+		"--rsh-output-format", "--output", "--rsh-print", "--include", "--rsh-header", "--header",
 		"--rsh-query", "--query", "--rsh-filter", "--filter", "--rsh-content-type", "--content-type",
-		"--rsh-timeout", "--timeout", "--rsh-profile", "--profile", "--rsh-auth", "--auth",
+		"--rsh-timeout", "--timeout",
 		"--rsh-no-browser", "--no-browser", "--rsh-no-paginate", "--no-paginate",
 		"--rsh-no-cache", "--no-cache", "--rsh-max-pages", "--max-pages", "--rsh-max-items", "--max-items",
 		"--rsh-retry", "--retry", "--rsh-validate", "--validate", "--rsh-generate-body", "--generate-body",
@@ -519,38 +695,13 @@ func (a *App) newRestishRuntime(service *agent.Service, config *restish.Config) 
 	runtime.SetCommandSurface(restish.CommandSurface{
 		HTTPMethods: []string{"get", "head", "post", "put", "patch", "delete"}, RegisteredAPIs: true, HideSupportCommands: true,
 		MetadataRefreshTimeout: 30 * time.Second, IgnoreUserConfig: true, DisablePlugins: true, HideInternalFlags: true,
+		CompactOperationHelp: true,
 	})
 	runtime.AddAuthHandler("dpop", restish.NewDPoPAuthHandler(service.CredentialSource()))
-	runtime.AddResponseMiddleware(agent.NewInteractiveResponseMiddleware(runtime, service.OpenApproval, a.stderr, a.noBrowser, a.profile))
+	runtime.AddResponseMiddleware(agent.NewInteractiveResponseMiddleware(runtime, service.OpenApproval, a.stderr, a.noBrowser, "default"))
 	runtime.Stdout, runtime.Stderr = a.stdout, a.stderr
 	runtime.SetSignalHandling(false)
 	return runtime, nil
-}
-
-func operationScopeSummary(operation restish.OperationInspection) string {
-	alternatives := make([]string, 0, len(operation.CredentialAlternatives))
-	seenAlternatives := make(map[string]bool)
-	for _, alternative := range operation.CredentialAlternatives {
-		var scopes []string
-		seenScopes := make(map[string]bool)
-		for _, requirement := range alternative {
-			for _, scope := range requirement.Needs {
-				if !seenScopes[scope] {
-					scopes = append(scopes, scope)
-					seenScopes[scope] = true
-				}
-			}
-		}
-		if len(scopes) == 0 {
-			continue
-		}
-		expression := strings.Join(scopes, "+")
-		if !seenAlternatives[expression] {
-			alternatives = append(alternatives, expression)
-			seenAlternatives[expression] = true
-		}
-	}
-	return strings.Join(alternatives, " OR ")
 }
 
 func (a *App) services() (*agent.Service, *catalog.Client, *http.Client, error) {

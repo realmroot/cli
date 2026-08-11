@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"mime"
 	"net/http"
-	"os"
 	"sort"
 	"strings"
 
@@ -54,6 +54,8 @@ type ToolIntegration struct {
 	Executables []string `json:"executables"`
 	Protocol    string   `json:"protocol"`
 }
+
+var ErrNoToolIntegrations = errors.New("Resource Server does not advertise native tool integrations")
 
 type Client struct {
 	api   *realmrootapi.ClientWithResponses
@@ -182,6 +184,15 @@ func (c *Client) ToolIntegrations(ctx context.Context, server ResourceServer) ([
 	if response.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("read %s native tool integrations: HTTP %d", server.CommandName, response.StatusCode)
 	}
+	if contentType := response.Header.Get("Content-Type"); contentType != "" {
+		mediaType, _, parseErr := mime.ParseMediaType(contentType)
+		if parseErr != nil {
+			return nil, fmt.Errorf("read %s native tool integrations content type: %w", server.CommandName, parseErr)
+		}
+		if mediaType != "application/json" && !strings.HasSuffix(mediaType, "+json") {
+			return nil, fmt.Errorf("%w: %q", ErrNoToolIntegrations, server.CommandName)
+		}
+	}
 	var document struct {
 		ToolIntegrations []ToolIntegration `json:"toolIntegrations"`
 	}
@@ -189,7 +200,7 @@ func (c *Client) ToolIntegrations(ctx context.Context, server ResourceServer) ([
 		return nil, fmt.Errorf("decode %s native tool integrations: %w", server.CommandName, err)
 	}
 	if len(document.ToolIntegrations) == 0 {
-		return nil, fmt.Errorf("Resource Server %q does not advertise native tool integrations", server.CommandName)
+		return nil, fmt.Errorf("%w: %q", ErrNoToolIntegrations, server.CommandName)
 	}
 	for _, integration := range document.ToolIntegrations {
 		if integration.ID == "" || integration.Protocol == "" || len(integration.Executables) == 0 {
@@ -217,13 +228,6 @@ func (c *Client) RestishConfig(ctx context.Context) (*restish.Config, []Resource
 				"createAgentAuthorizationRequest", "getAgentAuthorizationRequest",
 				"createAgentAccessRequestCredential",
 			}
-		}
-		if binding, bindErr := c.agent.BindingForResource(server.ResourceURL); bindErr == nil {
-			api.Profiles = map[string]*restish.ProfileConfig{"default": {Auth: &restish.AuthConfig{
-				Type: "dpop", Params: map[string]string{"source": "realmroot", "reference": binding.Reference},
-			}}}
-		} else if !errors.Is(bindErr, os.ErrNotExist) {
-			return nil, nil, fmt.Errorf("load credential binding for %s: %w", server.CommandName, bindErr)
 		}
 		config.APIs[server.CommandName] = api
 	}

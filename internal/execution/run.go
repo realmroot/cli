@@ -36,7 +36,7 @@ func (r *Runner) Run(ctx context.Context, server catalog.ResourceServer, integra
 	if err != nil {
 		return err
 	}
-	binding, err := r.service.BindingForResource(server.ResourceURL)
+	binding, err := r.service.ActiveBindingForResource(server.ResourceURL)
 	if err != nil {
 		return fmt.Errorf("load active %s authority: %w; request access with `realmroot agent request`", server.CommandName, err)
 	}
@@ -118,10 +118,11 @@ func selectIntegration(integrations []catalog.ToolIntegration, command []string)
 	executable := filepath.Base(command[0])
 	for _, integration := range integrations {
 		for _, candidate := range integration.Executables {
-			if executable != candidate {
+			commandPrefix := nativeCommandPrefix(integration, candidate)
+			if executable != commandPrefix[0] {
 				continue
 			}
-			if (candidate == "npx" || candidate == "pnpm") && (len(command) < 2 || filepath.Base(command[1]) != "wrangler") {
+			if len(commandPrefix) == 2 && (len(command) < 2 || filepath.Base(command[1]) != commandPrefix[1]) {
 				continue
 			}
 			path, err := exec.LookPath(command[0])
@@ -132,6 +133,23 @@ func selectIntegration(integrations []catalog.ToolIntegration, command []string)
 		}
 	}
 	return catalog.ToolIntegration{}, "", fmt.Errorf("Resource Server does not advertise support for native command %q", executable)
+}
+
+func NativeCommands(integrations []catalog.ToolIntegration) []string {
+	commands := make([]string, 0)
+	for _, integration := range integrations {
+		for _, executable := range integration.Executables {
+			commands = append(commands, strings.Join(nativeCommandPrefix(integration, executable), " "))
+		}
+	}
+	return commands
+}
+
+func nativeCommandPrefix(integration catalog.ToolIntegration, executable string) []string {
+	if (executable == "npx" || executable == "pnpm") && integration.ID == "wrangler" {
+		return []string{executable, "wrangler"}
+	}
+	return []string{executable}
 }
 
 func cleanEnvironment(values []string, removed []string) []string {

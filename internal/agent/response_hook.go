@@ -235,24 +235,35 @@ func acceptCredentialOffer(
 	states agentStateFinder,
 	references credentialSourceReferenceGenerator,
 ) (plugin.ResponseMiddlewareOutput, error) {
+	output, _, err := acceptCredentialOfferWithReference(resource, offer, origin, states, references)
+	return output, err
+}
+
+func acceptCredentialOfferWithReference(
+	resource interactiveResponse,
+	offer credentialOffer,
+	origin string,
+	states agentStateFinder,
+	references credentialSourceReferenceGenerator,
+) (plugin.ResponseMiddlewareOutput, string, error) {
 	if offer.Type != "dpop" || offer.Proof.Algorithm != "ES256" || offer.Proof.Method != http.MethodPost ||
 		offer.ResourceIndicator == "" || offer.Endpoint == "" || offer.Proof.URI == "" {
-		return plugin.ResponseMiddlewareOutput{}, errors.New("Resource credential offer is invalid")
+		return plugin.ResponseMiddlewareOutput{}, "", errors.New("Resource credential offer is invalid")
 	}
 	if !sameOrigin(offer.Endpoint, origin) {
-		return plugin.ResponseMiddlewareOutput{}, errors.New("Resource credential endpoint must use the discovered issuer origin")
+		return plugin.ResponseMiddlewareOutput{}, "", errors.New("Resource credential endpoint must use the discovered issuer origin")
 	}
 	store, ok := states.(resourceAccessStateStore)
 	if !ok {
-		return plugin.ResponseMiddlewareOutput{}, errors.New("Agent state store cannot persist Resource credentials")
+		return plugin.ResponseMiddlewareOutput{}, "", errors.New("Agent state store cannot persist Resource credentials")
 	}
 	runtime, err := agentRuntime()
 	if err != nil {
-		return plugin.ResponseMiddlewareOutput{}, err
+		return plugin.ResponseMiddlewareOutput{}, "", err
 	}
 	reference, err := store.FindReferenceByOriginIdentityRuntime(origin, resource.AgentID, runtime)
 	if err != nil {
-		return plugin.ResponseMiddlewareOutput{}, err
+		return plugin.ResponseMiddlewareOutput{}, "", err
 	}
 	authorizationDetails := append([]map[string]any{}, offer.AuthorizationDetails...)
 	credential := dpopCredential{
@@ -270,7 +281,7 @@ func acceptCredentialOffer(
 		if source.ResourceIndicator == credential.ResourceIndicator &&
 			sameAuthorizationDetails(source.AuthorizationDetails, credential.AuthorizationDetails) {
 			if credentialSourceReference != "" {
-				return plugin.ResponseMiddlewareOutput{}, errors.New("multiple credential sources exist for the same Resource")
+				return plugin.ResponseMiddlewareOutput{}, "", errors.New("multiple credential sources exist for the same Resource")
 			}
 			credentialSourceReference = candidateReference
 		}
@@ -278,13 +289,13 @@ func acceptCredentialOffer(
 	if credentialSourceReference == "" {
 		credentialSourceReference, err = references()
 		if err != nil {
-			return plugin.ResponseMiddlewareOutput{}, err
+			return plugin.ResponseMiddlewareOutput{}, "", err
 		}
 		if !isCredentialSourceReference(credentialSourceReference) {
-			return plugin.ResponseMiddlewareOutput{}, errors.New("generated credential source reference is invalid")
+			return plugin.ResponseMiddlewareOutput{}, "", errors.New("generated credential source reference is invalid")
 		}
 		if _, exists := reference.state.CredentialSources[credentialSourceReference]; exists {
-			return plugin.ResponseMiddlewareOutput{}, errors.New("generated credential source reference already exists")
+			return plugin.ResponseMiddlewareOutput{}, "", errors.New("generated credential source reference already exists")
 		}
 		reference.state.CredentialSources[credentialSourceReference] = credentialSource{
 			ResourceIndicator:    credential.ResourceIndicator,
@@ -307,18 +318,14 @@ func acceptCredentialOffer(
 		reference.state.CredentialSources[credentialSourceReference] = source
 	}
 	if err := store.UpdateStateReference(reference); err != nil {
-		return plugin.ResponseMiddlewareOutput{}, err
+		return plugin.ResponseMiddlewareOutput{}, "", err
 	}
 	return plugin.ResponseMiddlewareOutput{Response: &plugin.HookResponseUpdate{Body: map[string]any{
 		"status":               "ready",
 		"resourceIndicator":    credential.ResourceIndicator,
 		"authorizationDetails": credential.AuthorizationDetails,
 		"scopes":               resource.Scopes,
-		"credentialSource": map[string]any{
-			"name":      "realmroot",
-			"reference": credentialSourceReference,
-		},
-	}}}, nil
+	}}}, credentialSourceReference, nil
 }
 
 func stateForInteractiveResource(states agentStateFinder, origin string, agentID string) (agentState, error) {

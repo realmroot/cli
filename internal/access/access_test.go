@@ -2,7 +2,9 @@ package access
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/realmroot/toolbox/internal/catalog"
@@ -89,5 +91,27 @@ func TestAuthorizationDetailRequiresStringValues(t *testing.T) {
 	typeName, values, err := detail(map[string]any{"type": "github_installation", "installation_id": "123"})
 	if err != nil || typeName != "github_installation" || values["installation_id"] != "123" {
 		t.Fatalf("detail = %q %#v, err = %v", typeName, values, err)
+	}
+}
+
+func TestReadyReceiptDoesNotExposeInternalCredentialBinding(t *testing.T) {
+	value := receipt(
+		catalog.ResourceServer{CommandName: "github"},
+		"https://adapters.realmroot.dev/github",
+		[]string{"issues:read"},
+		[]map[string]any{{"type": "github_installation", "installation_id": "123"}},
+	)
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	output := string(encoded)
+	if strings.Contains(output, "credentialSource") || strings.Contains(output, "reference") {
+		t.Fatalf("public receipt exposes internal credential binding: %s", output)
+	}
+	for _, expected := range []string{`"status":"ready"`, `"resourceServer":"github"`, `"scopes":["issues:read"]`} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("public receipt omitted %s: %s", expected, output)
+		}
 	}
 }

@@ -110,9 +110,8 @@ func TestProfiledResponseAcceptsCredentialOfferWithoutGrantKnowledge(t *testing.
 		if !ok || len(authorizationDetails) != 0 {
 			t.Fatalf("authorization details = %#v", body["authorizationDetails"])
 		}
-		source, ok := body["credentialSource"].(map[string]any)
-		if !ok || source["name"] != "realmroot" || source["reference"] != testCredentialSourceReference {
-			t.Fatalf("credential source receipt = %#v", body)
+		if _, exposed := body["credentialSource"]; exposed {
+			t.Fatalf("public response exposes internal credential binding: %#v", body)
 		}
 		stored := states.state.CredentialSources[testCredentialSourceReference].Offers[0]
 		if stored.AccessToken != "" || stored.PrivateKey != "" || stored.ExpiresAt != nil {
@@ -135,16 +134,11 @@ func TestCredentialOfferReusesResourceReferenceAndPreservesOtherScopes(t *testin
 		t.Fatal(err)
 	}
 
-	output, err := acceptCredentialOffer(resource, *resource.CredentialOffer, "https://auth.example.com", states, func() (string, error) {
+	_, err = acceptCredentialOffer(resource, *resource.CredentialOffer, "https://auth.example.com", states, func() (string, error) {
 		return "", errors.New("reference generator must not run for an existing Resource")
 	})
 	if err != nil {
 		t.Fatal(err)
-	}
-	body := output.Response.Body.(map[string]any)
-	sourceReceipt := body["credentialSource"].(map[string]any)
-	if sourceReceipt["reference"] != testCredentialSourceReference {
-		t.Fatalf("credential source receipt = %#v", sourceReceipt)
 	}
 	source := states.state.CredentialSources[testCredentialSourceReference]
 	if len(source.Offers) != 2 {
@@ -198,9 +192,8 @@ func TestCredentialOfferReusesSourceReferenceAfterAllOffersWereRejected(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	receipt := output.Response.Body.(map[string]any)["credentialSource"].(map[string]any)
-	if receipt["reference"] != testCredentialSourceReference {
-		t.Fatalf("credential source receipt = %#v", receipt)
+	if body := output.Response.Body.(map[string]any); body["credentialSource"] != nil {
+		t.Fatalf("public response exposes internal credential binding: %#v", body)
 	}
 	if offers := states.state.CredentialSources[testCredentialSourceReference].Offers; len(offers) != 1 ||
 		!sameCredentialOffer(offers[0], credential) {
@@ -231,9 +224,8 @@ func TestCredentialOfferUsesSeparateReferenceForDifferentAuthorizationContext(t 
 	if err != nil {
 		t.Fatal(err)
 	}
-	receipt := output.Response.Body.(map[string]any)["credentialSource"].(map[string]any)
-	if receipt["reference"] != otherReference {
-		t.Fatalf("credential source receipt = %#v", receipt)
+	if body := output.Response.Body.(map[string]any); body["credentialSource"] != nil {
+		t.Fatalf("public response exposes internal credential binding: %#v", body)
 	}
 	if len(states.state.CredentialSources) != 2 ||
 		len(states.state.CredentialSources[testCredentialSourceReference].Offers) != 1 ||

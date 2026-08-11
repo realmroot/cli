@@ -18,8 +18,11 @@ Feature: Realmroot Toolbox command line
   Scenario: Inspect one Resource Server authority
     Given the Agent is enrolled
     When it runs "realmroot toolbox github"
-    Then the Resource Server scopes and current authorization state are displayed
+    Then connected-account scopes and current Agent authority are labeled separately
+    And authorization details include the exact request value without credential internals
+    And scope-filtered operations show only matching scope alternatives
     And its OpenAPI-generated operation groups are discoverable through command help
+    But large operation descriptions, schemas, examples, and response models do not flood ordinary help
 
   @journey:task-scoped-access @entrypoint:agent-request
   Scenario: Request exact Resource access
@@ -28,12 +31,16 @@ Feature: Realmroot Toolbox command line
     Then any required account connection is established or expanded for the requested authority
     And any required controller interaction is opened and polled
     And the resulting credential offer is stored without a target private key or access token
+    And the command returns only the ready authority without exposing the internal credential binding
 
   @journey:direct-resource-operation @entrypoint:toolbox-operation
   Scenario: Invoke an OpenAPI-generated Resource operation
-    Given an approved credential offer is bound to the Resource Server
+    Given one or more approved credential offers are stored for the Resource Server
     When the Agent invokes the generated Toolbox operation
-    Then Restish sends the request directly to the Resource Server with a proof-bound credential
+    Then Toolbox automatically selects an existing authorization context and least-privileged offer that covers the operation
+    And Restish sends the request directly to the Resource Server with the selected proof-bound credential
+    And missing authority is reported using Realmroot Resource Server and scope vocabulary
+    But embedded engine profiles, credential bindings, and setup commands are never exposed
 
   @journey:native-resource-tool @entrypoint:exec
   Scenario: Run a native tool with approved Agent authority

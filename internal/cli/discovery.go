@@ -13,6 +13,7 @@ const (
 	maxExpandedOperations    = 50
 	maxExpandedScopes        = 30
 	maxExpandedAuthorization = 30
+	maxCompactAuthorization  = 10
 	maxExpandedRows          = 150
 	maxDiscoveryResults      = 50
 	maxDiscoveryOutputBytes  = 16_000
@@ -32,16 +33,24 @@ func (o discoveryOptions) active() bool {
 }
 
 type resourceServerSummary struct {
-	ID               string   `json:"id"`
-	CommandName      string   `json:"commandName"`
-	Identifier       string   `json:"identifier"`
-	Name             string   `json:"name"`
-	Description      string   `json:"description,omitempty"`
-	ResourceURL      string   `json:"resourceUrl"`
-	Available        bool     `json:"available"`
-	ConnectionStatus string   `json:"connectionStatus"`
-	AuthorizedScopes []string `json:"authorizedScopes,omitempty"`
-	ScopeCount       int      `json:"scopeCount"`
+	CommandName            string   `json:"commandName"`
+	Identifier             string   `json:"identifier"`
+	Name                   string   `json:"name"`
+	Description            string   `json:"description,omitempty"`
+	ResourceURL            string   `json:"resourceUrl"`
+	ConnectionStatus       string   `json:"connectionStatus"`
+	ConnectedAccountScopes []string `json:"connectedAccountScopes,omitempty"`
+	AgentAuthorityScopes   []string `json:"agentAuthorityScopes,omitempty"`
+	ScopeCount             int      `json:"scopeCount"`
+}
+
+type operationSummary struct {
+	ID                string     `json:"operationId"`
+	Command           []string   `json:"command"`
+	Method            string     `json:"method"`
+	Path              string     `json:"path"`
+	Summary           string     `json:"summary,omitempty"`
+	ScopeAlternatives [][]string `json:"scopeAlternatives,omitempty"`
 }
 
 type resourceServerOverview struct {
@@ -54,9 +63,16 @@ type resourceServerOverview struct {
 	Scope                    string                        `json:"scope,omitempty"`
 	MatchCount               int                           `json:"matchCount,omitempty"`
 	Truncated                bool                          `json:"truncated,omitempty"`
+	AuthorizationTruncated   bool                          `json:"authorizationDetailsTruncated,omitempty"`
 	Scopes                   []catalog.Scope               `json:"scopes,omitempty"`
 	AuthorizationDetails     []catalog.AuthorizationDetail `json:"authorizationDetails,omitempty"`
-	Operations               []restish.OperationInspection `json:"operations,omitempty"`
+	Operations               []operationSummary            `json:"operations,omitempty"`
+	NativeCommands           []string                      `json:"nativeCommands,omitempty"`
+}
+
+type nativeToolSummary struct {
+	ResourceServer string   `json:"resourceServer"`
+	Commands       []string `json:"commands"`
 }
 
 func summarizeResourceServers(servers []catalog.ResourceServer) []resourceServerSummary {
@@ -69,9 +85,9 @@ func summarizeResourceServers(servers []catalog.ResourceServer) []resourceServer
 
 func summarizeResourceServer(server catalog.ResourceServer) resourceServerSummary {
 	return resourceServerSummary{
-		ID: server.ID, CommandName: server.CommandName, Identifier: server.Identifier, Name: server.Name,
-		Description: server.Description, ResourceURL: server.ResourceURL, Available: server.Available,
-		ConnectionStatus: server.ConnectionStatus, AuthorizedScopes: append([]string(nil), server.ConnectionScopes...),
+		CommandName: server.CommandName, Identifier: server.Identifier, Name: server.Name,
+		Description: server.Description, ResourceURL: server.ResourceURL,
+		ConnectionStatus: server.ConnectionStatus, ConnectedAccountScopes: append([]string(nil), server.ConnectionScopes...),
 		ScopeCount: len(server.Scopes),
 	}
 }
@@ -88,18 +104,72 @@ func buildResourceServerOverview(server catalog.ResourceServer, details []catalo
 		if !options.All {
 			matched, overview.Truncated = limitDiscoveryOperations(matched)
 		}
-		overview.Operations = matched
+		overview.Operations = summarizeOperations(matched, options.Scope)
 		return overview
 	}
 	if !options.All && resourceServerInventoryIsLarge(server, details, operations) {
 		overview.Mode = overviewModeCompact
+		overview.AuthorizationDetails = append([]catalog.AuthorizationDetail(nil), details...)
+		if len(overview.AuthorizationDetails) > maxCompactAuthorization {
+			overview.AuthorizationDetails = overview.AuthorizationDetails[:maxCompactAuthorization]
+			overview.AuthorizationTruncated = true
+		}
 		return overview
 	}
 	overview.Mode = overviewModeExpanded
 	overview.Scopes = append([]catalog.Scope(nil), server.Scopes...)
 	overview.AuthorizationDetails = append([]catalog.AuthorizationDetail(nil), details...)
-	overview.Operations = append([]restish.OperationInspection(nil), operations...)
+	overview.Operations = summarizeOperations(operations, "")
 	return overview
+}
+
+func summarizeOperations(operations []restish.OperationInspection, scopeFilter string) []operationSummary {
+	result := make([]operationSummary, 0, len(operations))
+	for _, operation := range operations {
+		result = append(result, operationSummary{
+			ID: operation.ID, Command: append([]string(nil), operation.Command...), Method: operation.Method,
+			Path: operation.Path, Summary: operation.Summary, ScopeAlternatives: operationScopeAlternatives(operation, scopeFilter),
+		})
+	}
+	return result
+}
+
+func operationScopeAlternatives(operation restish.OperationInspection, scopeFilter string) [][]string {
+	result := make([][]string, 0, len(operation.CredentialAlternatives))
+	seenAlternatives := make(map[string]bool)
+	for _, alternative := range operation.CredentialAlternatives {
+		scopes := make([]string, 0)
+		seenScopes := make(map[string]bool)
+		matchesFilter := scopeFilter == ""
+		for _, requirement := range alternative {
+			for _, scope := range requirement.Needs {
+				if scope == scopeFilter {
+					matchesFilter = true
+				}
+				if scope != "" && !seenScopes[scope] {
+					scopes = append(scopes, scope)
+					seenScopes[scope] = true
+				}
+			}
+		}
+		if !matchesFilter || len(scopes) == 0 {
+			continue
+		}
+		key := strings.Join(scopes, "\x00")
+		if !seenAlternatives[key] {
+			seenAlternatives[key] = true
+			result = append(result, scopes)
+		}
+	}
+	return result
+}
+
+func operationScopeSummary(operation operationSummary) string {
+	alternatives := make([]string, 0, len(operation.ScopeAlternatives))
+	for _, scopes := range operation.ScopeAlternatives {
+		alternatives = append(alternatives, strings.Join(scopes, "+"))
+	}
+	return strings.Join(alternatives, " OR ")
 }
 
 func resourceServerInventoryIsLarge(server catalog.ResourceServer, details []catalog.AuthorizationDetail, operations []restish.OperationInspection) bool {
@@ -201,7 +271,7 @@ func limitDiscoveryOperations(operations []restish.OperationInspection) ([]resti
 	used := 0
 	for index, operation := range operations {
 		size := len(operation.ID) + len(strings.Join(operation.Command, " ")) + len(operation.Method) +
-			len(operation.Path) + len(operation.Summary) + len(operationScopeSummary(operation))
+			len(operation.Path) + len(operation.Summary)
 		if index >= maxDiscoveryResults || (index > 0 && used+size > maxDiscoveryOutputBytes) {
 			return operations[:index], true
 		}

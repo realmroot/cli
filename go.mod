@@ -4,7 +4,7 @@ go 1.25.3
 
 require (
 	github.com/oapi-codegen/runtime v1.6.0
-	github.com/saltbo/restish/v2 v2.3.1-0.20260811152007-78d7865cda88
+	github.com/saltbo/restish/v2 v2.3.1-0.20260811210222-2daa7d288a21
 	github.com/spf13/cobra v1.10.2
 )
 
