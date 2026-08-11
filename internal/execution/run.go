@@ -40,12 +40,7 @@ func (r *Runner) Run(ctx context.Context, server catalog.ResourceServer, integra
 	if err != nil {
 		return err
 	}
-	var binding agent.CredentialBinding
-	if len(options.AuthorizationDetails) > 0 {
-		binding, err = r.service.BindingForAuthorizationContextAllAuthority(server.ResourceURL, options.AuthorizationDetails)
-	} else {
-		binding, err = r.service.BindingForResource(server.ResourceURL)
-	}
+	binding, err := r.service.ExecutionBinding(server.ResourceURL, options.AuthorizationDetails)
 	if err != nil {
 		return fmt.Errorf("load selected %s Context authority: %w; inspect Contexts with `realmroot toolbox %s context` or request access with `realmroot agent request`", server.CommandName, err, server.CommandName)
 	}

@@ -339,6 +339,46 @@ func (s *Service) ActiveBindingForResource(resourceIndicator string) (Credential
 	return CredentialBinding{}, os.ErrNotExist
 }
 
+func (s *Service) ExecutionBinding(resourceIndicator string, details []map[string]any) (CredentialBinding, error) {
+	if len(details) > 0 {
+		binding, _, err := s.BindingForAuthorizationContext(resourceIndicator, details)
+		return binding, err
+	}
+
+	sources, err := s.credentialSourcesForResource(resourceIndicator)
+	if err != nil {
+		return CredentialBinding{}, err
+	}
+	active, activeErr := s.activeBinding(resourceIndicator)
+	if activeErr != nil && !errors.Is(activeErr, os.ErrNotExist) {
+		return CredentialBinding{}, activeErr
+	}
+	for _, source := range sources {
+		if source.reference != active.Reference {
+			continue
+		}
+		binding, ok := leastPrivilegeSourceBinding(source)
+		if !ok {
+			return CredentialBinding{}, os.ErrNotExist
+		}
+		return binding, nil
+	}
+	if len(sources) == 0 {
+		return CredentialBinding{}, os.ErrNotExist
+	}
+	if len(sources) > 1 {
+		return CredentialBinding{}, fmt.Errorf("%w for Resource Server %q", ErrAuthorizationContextAmbiguous, resourceIndicator)
+	}
+	binding, ok := leastPrivilegeSourceBinding(sources[0])
+	if !ok {
+		return CredentialBinding{}, os.ErrNotExist
+	}
+	if err := s.storeActiveBinding(resourceIndicator, binding); err != nil {
+		return CredentialBinding{}, err
+	}
+	return binding, nil
+}
+
 func (s *Service) AuthorizationContexts(resourceIndicator string) ([]AuthorizationContext, error) {
 	sources, err := s.credentialSourcesForResource(resourceIndicator)
 	if err != nil {

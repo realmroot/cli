@@ -126,6 +126,146 @@ func TestActiveBindingForResourceKeepsExactOfferForNativeTools(t *testing.T) {
 	}
 }
 
+func TestExecutionBindingStartsWithOneApprovedAuthoritySet(t *testing.T) {
+	// [spec: cli/native-resource-tool]
+	service, resource := serviceWithCredentialSources(t, map[string]credentialSource{
+		testCredentialSourceReference: sourceWithScopes(
+			t,
+			"workspace-1",
+			[]string{"contents:write"},
+			[]string{"metadata:read"},
+		),
+	})
+	details := []map[string]any{{"type": "workspace", "identifier": "workspace-1"}}
+
+	binding, err := service.ExecutionBinding(resource, details)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if binding.Reference != testCredentialSourceReference || len(binding.Scopes) != 1 || binding.Scopes[0] != "contents:write" {
+		t.Fatalf("initial execution binding = %#v", binding)
+	}
+
+	readBinding, err := service.BindingForReferenceScopeAlternatives(
+		resource,
+		binding.Reference,
+		[][]string{{"metadata:read"}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(readBinding.Scopes) != 1 || readBinding.Scopes[0] != "metadata:read" {
+		t.Fatalf("challenged execution binding = %#v", readBinding)
+	}
+}
+
+func TestExecutionBindingUsesOneApprovedSetFromTheActiveSource(t *testing.T) {
+	// [spec: cli/native-resource-tool]
+	service, resource := serviceWithCredentialSources(t, map[string]credentialSource{
+		testCredentialSourceReference: sourceWithScopes(
+			t,
+			"workspace-1",
+			[]string{"contents:read"},
+			[]string{"contents:write"},
+		),
+	})
+	writeActiveBindings(t, service, 2, map[string]any{
+		resource: map[string]any{
+			"reference": testCredentialSourceReference,
+			"scopes":    []string{"contents:read", "contents:write"},
+		},
+	})
+
+	binding, err := service.ExecutionBinding(resource, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if binding.Reference != testCredentialSourceReference || len(binding.Scopes) != 1 || binding.Scopes[0] != "contents:read" {
+		t.Fatalf("execution binding = %#v", binding)
+	}
+}
+
+func TestExecutionBindingSelectsTheOnlySourceWithoutAContext(t *testing.T) {
+	// [spec: cli/native-resource-tool]
+	service, resource := serviceWithCredentialSources(t, map[string]credentialSource{
+		testCredentialSourceReference: sourceWithScopes(t, "workspace-1", []string{"files:read"}),
+	})
+
+	binding, err := service.ExecutionBinding(resource, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if binding.Reference != testCredentialSourceReference || len(binding.Scopes) != 1 || binding.Scopes[0] != "files:read" {
+		t.Fatalf("execution binding = %#v", binding)
+	}
+	active, err := service.ActiveBindingForResource(resource)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if active.Reference != binding.Reference || len(active.Scopes) != 1 || active.Scopes[0] != "files:read" {
+		t.Fatalf("active binding = %#v", active)
+	}
+}
+
+func TestExecutionBindingRejectsAnAmbiguousContext(t *testing.T) {
+	// [spec: cli/native-resource-tool]
+	service, resource := serviceWithCredentialSources(t, map[string]credentialSource{
+		testCredentialSourceReference:   sourceWithScopes(t, "workspace-1", []string{"files:read"}),
+		secondCredentialSourceReference: sourceWithScopes(t, "workspace-2", []string{"files:read"}),
+	})
+
+	_, err := service.ExecutionBinding(resource, nil)
+	if !errors.Is(err, ErrAuthorizationContextAmbiguous) {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestExecutionBindingReportsMissingAndInvalidAuthorityState(t *testing.T) {
+	// [spec: cli/native-resource-tool]
+	t.Run("missing", func(t *testing.T) {
+		t.Setenv("AGENT", defaultAgentRuntime)
+		service := &Service{states: &fileStateStore{root: t.TempDir()}}
+		if _, err := service.ExecutionBinding("https://resource.example", nil); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("error = %v", err)
+		}
+	})
+
+	t.Run("invalid runtime", func(t *testing.T) {
+		service, resource := serviceWithCredentialSources(t, map[string]credentialSource{
+			testCredentialSourceReference: sourceWithScopes(t, "workspace-1", []string{"files:read"}),
+		})
+		t.Setenv("AGENT", "!")
+		if _, err := service.ExecutionBinding(resource, nil); err == nil {
+			t.Fatal("invalid runtime was accepted")
+		}
+	})
+
+	t.Run("invalid active binding", func(t *testing.T) {
+		service, resource := serviceWithCredentialSources(t, map[string]credentialSource{
+			testCredentialSourceReference: sourceWithScopes(t, "workspace-1", []string{"files:read"}),
+		})
+		if err := os.WriteFile(filepath.Join(service.states.root, "bindings.json"), []byte("{"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := service.ExecutionBinding(resource, nil); err == nil {
+			t.Fatal("invalid active binding was accepted")
+		}
+	})
+
+	t.Run("unwritable active binding", func(t *testing.T) {
+		service, resource := serviceWithCredentialSources(t, map[string]credentialSource{
+			testCredentialSourceReference: sourceWithScopes(t, "workspace-1", []string{"files:read"}),
+		})
+		if err := os.Chmod(service.states.root, 0o500); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(service.states.root, 0o700) })
+		if _, err := service.ExecutionBinding(resource, nil); err == nil {
+			t.Fatal("unwritable active binding was accepted")
+		}
+	})
+}
+
 func TestAuthorizationContextsSelectsAnExistingContextWithoutExposingItsReference(t *testing.T) {
 	service, resource := serviceWithCredentialSources(t, map[string]credentialSource{
 		testCredentialSourceReference:   sourceWithScopes(t, "workspace-1", []string{"files:write"}, []string{"files:read"}),
