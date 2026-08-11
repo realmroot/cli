@@ -47,7 +47,10 @@ GitHub execution supports REST, GraphQL, and Git Smart HTTP. Git commits made
 through `realmroot exec github -- git ...` use the stable Agent name and
 `<subject>@agents.realmroot.dev` email without changing repository or global
 Git configuration. Cloudflare execution redirects Wrangler's API base to the
-Cloudflare Resource Server and retains its native subcommands.
+Cloudflare Resource Server and retains its native subcommands. When Cloudflare
+returns a short-lived asset-upload credential, the broker keeps it in memory
+and accepts it only for that account's asset-upload path during the same exec
+session.
 
 `exec` consumes the exact active credential binding created by `realmroot
 agent request`; it never opens approval, requests access, or expands scopes.
