@@ -25,6 +25,8 @@ type credentialSource interface {
 	Issue(context.Context, string, string, string, string, string, []string) (restish.DPoPIssuedCredential, error)
 }
 
+type scopeResolver func(reference string, alternatives [][]string) ([]string, error)
+
 type Broker struct {
 	resource           string
 	reference          string
@@ -36,6 +38,7 @@ type Broker struct {
 	listener           net.Listener
 	temporaryDirectory string
 	sessionToken       string
+	resolveScopes      scopeResolver
 	cloudflareSession  cloudflareAssetSession
 	cloudflareMu       sync.RWMutex
 }
@@ -45,7 +48,7 @@ type cloudflareAssetSession struct {
 	token   string
 }
 
-func NewBroker(resource, reference string, scopes []string, source credentialSource, client *http.Client) (*Broker, error) {
+func NewBroker(resource, reference string, scopes []string, source credentialSource, resolveScopes scopeResolver, client *http.Client) (*Broker, error) {
 	if _, err := url.ParseRequestURI(resource); err != nil {
 		return nil, fmt.Errorf("invalid Resource Server URL: %w", err)
 	}
@@ -59,7 +62,7 @@ func NewBroker(resource, reference string, scopes []string, source credentialSou
 	return &Broker{
 		resource: strings.TrimSuffix(resource, "/"), reference: reference, scopes: append([]string(nil), scopes...),
 		auth: restish.NewDPoPAuthHandler(source), store: newMemoryTokenStore(), client: client,
-		sessionToken: hex.EncodeToString(token),
+		sessionToken: hex.EncodeToString(token), resolveScopes: resolveScopes,
 	}, nil
 }
 
@@ -227,19 +230,135 @@ func (b *Broker) cloudflareHandler(providerBase string) http.HandlerFunc {
 }
 
 func (b *Broker) realmrootRequest(request *http.Request, target string) (*http.Response, error) {
-	upstream, err := http.NewRequestWithContext(request.Context(), request.Method, target, request.Body)
+	body, cleanup, err := replayableRequestBody(request)
 	if err != nil {
+		return nil, err
+	}
+	defer cleanup()
+	result, err := b.authenticatedRequest(request, target, b.scopes, body)
+	if err != nil || result.StatusCode != http.StatusForbidden || b.resolveScopes == nil {
+		return result, err
+	}
+	alternatives := insufficientScopeAlternatives(result.Header)
+	if len(alternatives) == 0 {
+		return result, nil
+	}
+	scopes, err := b.resolveScopes(b.reference, alternatives)
+	if errors.Is(err, os.ErrNotExist) || sameStringSet(scopes, b.scopes) {
+		return result, nil
+	}
+	if err != nil {
+		result.Body.Close()
+		return nil, err
+	}
+	result.Body.Close()
+	return b.authenticatedRequest(request, target, scopes, body)
+}
+
+func (b *Broker) authenticatedRequest(request *http.Request, target string, scopes []string, body func() (io.ReadCloser, error)) (*http.Response, error) {
+	content, err := body()
+	if err != nil {
+		return nil, err
+	}
+	upstream, err := http.NewRequestWithContext(request.Context(), request.Method, target, content)
+	if err != nil {
+		content.Close()
 		return nil, errors.New("invalid upstream request")
 	}
+	upstream.ContentLength = request.ContentLength
 	upstream.Header = forwardedHeaders(request.Header)
 	if err := b.auth.Authenticate(request.Context(), upstream, restish.AuthContext{
-		APIName: "exec", ProfileName: "default", BaseURL: b.resource, CacheKey: "exec:" + b.reference,
-		Params:     map[string]string{"source": "realmroot", "reference": b.reference, "scopes": strings.Join(b.scopes, " ")},
+		APIName: "exec", ProfileName: "default", BaseURL: b.resource, CacheKey: "exec:" + b.reference + ":" + strings.Join(scopes, " "),
+		Params:     map[string]string{"source": "realmroot", "reference": b.reference, "scopes": strings.Join(scopes, " ")},
 		TokenStore: b.store, HTTPClient: b.client, Stderr: io.Discard,
 	}); err != nil {
+		content.Close()
 		return nil, err
 	}
 	return b.client.Do(upstream)
+}
+
+func replayableRequestBody(request *http.Request) (func() (io.ReadCloser, error), func(), error) {
+	if request.Body == nil || request.Body == http.NoBody {
+		return func() (io.ReadCloser, error) { return http.NoBody, nil }, func() {}, nil
+	}
+	file, err := os.CreateTemp("", "realmroot-exec-request-*")
+	if err != nil {
+		return nil, nil, err
+	}
+	path := file.Name()
+	cleanup := func() { _ = os.Remove(path) }
+	if _, err := io.Copy(file, request.Body); err != nil {
+		file.Close()
+		cleanup()
+		return nil, nil, err
+	}
+	if err := request.Body.Close(); err != nil {
+		file.Close()
+		cleanup()
+		return nil, nil, err
+	}
+	if err := file.Close(); err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	return func() (io.ReadCloser, error) { return os.Open(path) }, cleanup, nil
+}
+
+func insufficientScopeAlternatives(headers http.Header) [][]string {
+	var alternatives [][]string
+	for _, header := range headers.Values("WWW-Authenticate") {
+		remaining := header
+		for {
+			start := strings.Index(strings.ToLower(remaining), "dpop ")
+			if start < 0 {
+				break
+			}
+			challenge := remaining[start+len("dpop "):]
+			next := strings.Index(strings.ToLower(challenge), ", dpop ")
+			if next >= 0 {
+				remaining = challenge[next+2:]
+				challenge = challenge[:next]
+			} else {
+				remaining = ""
+			}
+			if authenticateParameter(challenge, "error") == "insufficient_scope" {
+				if scopes := strings.Fields(authenticateParameter(challenge, "scope")); len(scopes) > 0 {
+					alternatives = append(alternatives, scopes)
+				}
+			}
+			if remaining == "" {
+				break
+			}
+		}
+	}
+	return alternatives
+}
+
+func authenticateParameter(challenge, expected string) string {
+	for _, parameter := range strings.Split(challenge, ",") {
+		name, value, ok := strings.Cut(strings.TrimSpace(parameter), "=")
+		if ok && strings.EqualFold(name, expected) {
+			return strings.Trim(strings.TrimSpace(value), `"`)
+		}
+	}
+	return ""
+}
+
+func sameStringSet(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	seen := make(map[string]bool, len(left))
+	for _, value := range left {
+		seen[value] = true
+	}
+	for _, value := range right {
+		if !seen[value] {
+			return false
+		}
+	}
+	return true
 }
 
 func (b *Broker) providerRequest(request *http.Request, target, authorization string) (*http.Response, error) {

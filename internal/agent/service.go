@@ -44,6 +44,12 @@ type CredentialBinding struct {
 	Scopes    []string
 }
 
+type AuthorizationContext struct {
+	AuthorizationDetails []map[string]any `json:"authorizationDetails"`
+	Scopes               []string         `json:"scopes"`
+	Active               bool             `json:"active"`
+}
+
 var ErrAuthorizationContextAmbiguous = errors.New("multiple authorization contexts can satisfy the operation")
 
 type resourceCredentialSource struct {
@@ -264,6 +270,69 @@ func (s *Service) ActiveBindingForResource(resourceIndicator string) (Credential
 	return CredentialBinding{}, os.ErrNotExist
 }
 
+func (s *Service) AuthorizationContexts(resourceIndicator string) ([]AuthorizationContext, error) {
+	sources, err := s.credentialSourcesForResource(resourceIndicator)
+	if err != nil {
+		return nil, err
+	}
+	active, activeErr := s.activeBinding(resourceIndicator)
+	if activeErr != nil && !errors.Is(activeErr, os.ErrNotExist) {
+		return nil, activeErr
+	}
+	contexts := make([]AuthorizationContext, 0, len(sources))
+	for _, source := range sources {
+		contexts = append(contexts, AuthorizationContext{
+			AuthorizationDetails: cloneAuthorizationDetails(source.source.AuthorizationDetails),
+			Scopes:               bindingForSource(source).Scopes,
+			Active:               source.reference == active.Reference,
+		})
+	}
+	return contexts, nil
+}
+
+func (s *Service) SelectAuthorizationContext(resourceIndicator string, details []map[string]any) (AuthorizationContext, error) {
+	sources, err := s.credentialSourcesForResource(resourceIndicator)
+	if err != nil {
+		return AuthorizationContext{}, err
+	}
+	for _, source := range sources {
+		if !sameAuthorizationDetails(source.source.AuthorizationDetails, details) {
+			continue
+		}
+		binding, ok := leastPrivilegeSourceBinding(source)
+		if !ok {
+			return AuthorizationContext{}, os.ErrNotExist
+		}
+		if err := s.storeActiveBinding(resourceIndicator, binding); err != nil {
+			return AuthorizationContext{}, err
+		}
+		return AuthorizationContext{
+			AuthorizationDetails: cloneAuthorizationDetails(source.source.AuthorizationDetails),
+			Scopes:               bindingForSource(source).Scopes,
+			Active:               true,
+		}, nil
+	}
+	return AuthorizationContext{}, os.ErrNotExist
+}
+
+func (s *Service) BindingForReferenceScopeAlternatives(resourceIndicator, reference string, alternatives [][]string) (CredentialBinding, error) {
+	sources, err := s.credentialSourcesForResource(resourceIndicator)
+	if err != nil {
+		return CredentialBinding{}, err
+	}
+	for _, source := range sources {
+		if source.reference != reference {
+			continue
+		}
+		offer, ok := leastPrivilegeOffer(source.source.Offers, alternatives)
+		if !ok {
+			return CredentialBinding{}, os.ErrNotExist
+		}
+		return CredentialBinding{Reference: reference, Scopes: normalizedBindingScopes(offer.Scopes)}, nil
+	}
+	return CredentialBinding{}, os.ErrNotExist
+}
+
 func (s *Service) BindingForScopeAlternatives(resourceIndicator string, alternatives [][]string) (CredentialBinding, error) {
 	sources, err := s.credentialSourcesForResource(resourceIndicator)
 	if err != nil {
@@ -335,6 +404,32 @@ func bindingForSource(source resourceCredentialSource) CredentialBinding {
 		scopes = append(scopes, offer.Scopes...)
 	}
 	return CredentialBinding{Reference: source.reference, Scopes: normalizedBindingScopes(scopes)}
+}
+
+func leastPrivilegeSourceBinding(source resourceCredentialSource) (CredentialBinding, bool) {
+	if len(source.source.Offers) == 0 {
+		return CredentialBinding{}, false
+	}
+	selected := normalizedBindingScopes(source.source.Offers[0].Scopes)
+	for _, offer := range source.source.Offers[1:] {
+		candidate := normalizedBindingScopes(offer.Scopes)
+		if len(candidate) < len(selected) || (len(candidate) == len(selected) && strings.Join(candidate, "\x00") < strings.Join(selected, "\x00")) {
+			selected = candidate
+		}
+	}
+	return CredentialBinding{Reference: source.reference, Scopes: selected}, true
+}
+
+func cloneAuthorizationDetails(details []map[string]any) []map[string]any {
+	cloned := make([]map[string]any, 0, len(details))
+	for _, detail := range details {
+		copy := make(map[string]any, len(detail))
+		for name, value := range detail {
+			copy[name] = value
+		}
+		cloned = append(cloned, copy)
+	}
+	return cloned
 }
 
 func leastPrivilegeOffer(offers []dpopCredential, alternatives [][]string) (dpopCredential, bool) {
