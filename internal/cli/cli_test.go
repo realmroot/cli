@@ -174,6 +174,90 @@ func TestPrepareOperationCredentialsBindsOpenAPICredentialID(t *testing.T) {
 	}
 }
 
+func TestPrepareOperationCredentialsReplacesStaleProfileReference(t *testing.T) {
+	config := &restish.Config{APIs: map[string]*restish.APIConfig{
+		"github": {Profiles: map[string]*restish.ProfileConfig{
+			"default": {Auth: &restish.AuthConfig{Type: "dpop", Params: map[string]string{"source": "realmroot", "reference": "stale-reference"}}},
+		}},
+	}}
+	binding := &agent.CredentialBinding{Reference: "selected-reference", Scopes: []string{"issues:read"}}
+
+	if err := prepareOperationCredentials(config, catalog.ResourceServer{CommandName: "github"}, githubOperationInspection(), []string{"issues", "issues-get"}, "default", binding); err != nil {
+		t.Fatal(err)
+	}
+	credential := config.APIs["github"].Profiles["default"].Credentials["realmrootOidc"]
+	if credential == nil || credential.Auth == nil || credential.Auth.Params["reference"] != "selected-reference" {
+		t.Fatalf("credential = %#v", credential)
+	}
+}
+
+func TestOperationScopeAlternativesPreserveOAuthAlternatives(t *testing.T) {
+	operation := githubOperationInspection().Operations[0]
+	if got := operationCredentialScopeAlternatives(operation); len(got) != 2 || strings.Join(got[0], " ") != "issues:read" || strings.Join(got[1], " ") != "metadata:read" {
+		t.Fatalf("scope alternatives = %#v", got)
+	}
+}
+
+type recordingOperationCredentialResolver struct {
+	binding      agent.CredentialBinding
+	err          error
+	resource     string
+	alternatives [][]string
+}
+
+func (r *recordingOperationCredentialResolver) BindingForScopeAlternatives(resource string, alternatives [][]string) (agent.CredentialBinding, error) {
+	r.resource = resource
+	r.alternatives = alternatives
+	return r.binding, r.err
+}
+
+func TestResolveOperationCredentialBindingSelectsExistingOfferForOperation(t *testing.T) {
+	resolver := &recordingOperationCredentialResolver{binding: agent.CredentialBinding{
+		Reference: "selected-reference", Scopes: []string{"issues:read"},
+	}}
+	server := catalog.ResourceServer{CommandName: "github", ResourceURL: "https://api.example.com/github"}
+
+	binding, err := resolveOperationCredentialBinding(
+		resolver,
+		server,
+		githubOperationInspection(),
+		[]string{"issues", "issues-get"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if binding == nil || binding.Reference != "selected-reference" || resolver.resource != server.ResourceURL ||
+		len(resolver.alternatives) != 2 || strings.Join(resolver.alternatives[0], " ") != "issues:read" {
+		t.Fatalf("binding = %#v, resource = %q, alternatives = %#v", binding, resolver.resource, resolver.alternatives)
+	}
+}
+
+func TestResolveOperationCredentialBindingDoesNotResolveHelp(t *testing.T) {
+	resolver := &recordingOperationCredentialResolver{err: errors.New("resolver must not run")}
+	binding, err := resolveOperationCredentialBinding(
+		resolver,
+		catalog.ResourceServer{CommandName: "github", ResourceURL: "https://api.example.com/github"},
+		githubOperationInspection(),
+		[]string{"issues", "issues-get", "--help"},
+	)
+	if err != nil || binding != nil || resolver.resource != "" {
+		t.Fatalf("binding = %#v, resource = %q, error = %v", binding, resolver.resource, err)
+	}
+}
+
+func TestResolveOperationCredentialBindingReportsMissingExistingOffer(t *testing.T) {
+	resolver := &recordingOperationCredentialResolver{err: os.ErrNotExist}
+	_, err := resolveOperationCredentialBinding(
+		resolver,
+		catalog.ResourceServer{CommandName: "github", ResourceURL: "https://api.example.com/github"},
+		githubOperationInspection(),
+		[]string{"issues", "issues-get"},
+	)
+	if err == nil || !strings.Contains(err.Error(), "no approved Agent authority") || !strings.Contains(err.Error(), "issues:read") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
 func TestMissingOperationAuthorityUsesOnlyProductVocabulary(t *testing.T) {
 	err := prepareOperationCredentials(
 		&restish.Config{APIs: map[string]*restish.APIConfig{"github": {}}},

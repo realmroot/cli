@@ -36,7 +36,7 @@ func (r *Runner) Run(ctx context.Context, server catalog.ResourceServer, integra
 	if err != nil {
 		return err
 	}
-	binding, err := r.service.BindingForResource(server.ResourceURL)
+	binding, err := r.service.ActiveBindingForResource(server.ResourceURL)
 	if err != nil {
 		return fmt.Errorf("load active %s authority: %w; request access with `realmroot agent request`", server.CommandName, err)
 	}

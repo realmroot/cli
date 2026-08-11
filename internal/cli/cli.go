@@ -632,13 +632,9 @@ func (a *App) runRestish(ctx context.Context, service *agent.Service, client *ca
 		if inspectErr != nil {
 			return inspectErr
 		}
-		var binding *agent.CredentialBinding
-		resolved, bindErr := service.BindingForResource(server.ResourceURL)
-		switch {
-		case bindErr == nil:
-			binding = &resolved
-		case !errors.Is(bindErr, os.ErrNotExist):
-			return fmt.Errorf("load Agent authority for %s: %w", server.CommandName, bindErr)
+		binding, bindingErr := resolveOperationCredentialBinding(service, server, inspection, args[1:])
+		if bindingErr != nil {
+			return bindingErr
 		}
 		if err := prepareOperationCredentials(config, server, inspection, args[1:], profile, binding); err != nil {
 			return err

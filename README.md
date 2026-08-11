@@ -57,8 +57,13 @@ returns a short-lived asset-upload credential, the broker keeps it in memory
 and accepts it only for that account's asset-upload path during the same exec
 session.
 
-`exec` consumes the exact active credential binding created by `realmroot
-agent request`; it never opens approval, requests access, or expands scopes.
+Generated Toolbox operations automatically select the least-privileged stored
+credential offer that covers the operation. A later access request does not
+hide older approved offers in the same authorization context.
+
+`exec` consumes the exact active credential offer selected by the most recent
+access request or generated Toolbox operation; it never opens approval,
+requests access, or expands scopes.
 
 `platform` is reserved and always maps to the Resource Server whose published
 identifier is `realmroot`. Resource Server names also cannot collide with the

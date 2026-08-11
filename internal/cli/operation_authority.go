@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/realmroot/toolbox/internal/agent"
@@ -9,6 +11,33 @@ import (
 	restish "github.com/saltbo/restish/v2"
 	restishconfig "github.com/saltbo/restish/v2/config"
 )
+
+type operationCredentialResolver interface {
+	BindingForScopeAlternatives(string, [][]string) (agent.CredentialBinding, error)
+}
+
+func resolveOperationCredentialBinding(
+	resolver operationCredentialResolver,
+	server catalog.ResourceServer,
+	inspection restish.APIInspection,
+	args []string,
+) (*agent.CredentialBinding, error) {
+	operation, selected := selectedOperation(inspection.Operations, args)
+	if !selected || !invocationRequiresAuthority(args) || !operationRequiresAuthority(operation) {
+		return nil, nil
+	}
+	binding, err := resolver.BindingForScopeAlternatives(
+		server.ResourceURL,
+		operationCredentialScopeAlternatives(operation),
+	)
+	if err == nil {
+		return &binding, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, operationAuthorityError(server.CommandName, operation, nil)
+	}
+	return nil, fmt.Errorf("select Agent authority for %s operation: %w", server.CommandName, err)
+}
 
 func selectedResourceServer(servers []catalog.ResourceServer, args []string) (catalog.ResourceServer, bool) {
 	if len(args) == 0 || genericHTTPMethod(args[0]) {
@@ -54,12 +83,9 @@ func prepareOperationCredentials(
 		}
 		api.Profiles[profileName] = profile
 	}
-	auth := profile.Auth
-	if auth == nil {
-		auth = &restish.AuthConfig{Type: "dpop", Params: map[string]string{
-			"source": "realmroot", "reference": binding.Reference,
-		}}
-	}
+	auth := &restish.AuthConfig{Type: "dpop", Params: map[string]string{
+		"source": "realmroot", "reference": binding.Reference,
+	}}
 	profile.Auth = nil
 	if profile.Credentials == nil {
 		profile.Credentials = map[string]*restishconfig.CredentialConfig{}
@@ -77,6 +103,37 @@ func prepareOperationCredentials(
 		}
 	}
 	return nil
+}
+
+func operationCredentialScopeAlternatives(operation restish.OperationInspection) [][]string {
+	result := make([][]string, 0, len(operation.CredentialAlternatives))
+	for _, alternative := range operation.CredentialAlternatives {
+		scopes := make([]string, 0)
+		supported := len(alternative) > 0
+		for _, requirement := range alternative {
+			if requirement.Kind != "oauth2-dpop" {
+				supported = false
+				break
+			}
+			scopes = append(scopes, requirement.Needs...)
+		}
+		if supported && len(scopes) > 0 {
+			result = append(result, uniqueOperationScopes(scopes))
+		}
+	}
+	return result
+}
+
+func uniqueOperationScopes(scopes []string) []string {
+	seen := make(map[string]bool, len(scopes))
+	result := make([]string, 0, len(scopes))
+	for _, scope := range scopes {
+		if scope != "" && !seen[scope] {
+			seen[scope] = true
+			result = append(result, scope)
+		}
+	}
+	return result
 }
 
 func invocationRequiresAuthority(args []string) bool {

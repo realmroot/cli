@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"mime"
 	"net/http"
-	"os"
 	"sort"
 	"strings"
 
@@ -229,13 +228,6 @@ func (c *Client) RestishConfig(ctx context.Context) (*restish.Config, []Resource
 				"createAgentAuthorizationRequest", "getAgentAuthorizationRequest",
 				"createAgentAccessRequestCredential",
 			}
-		}
-		if binding, bindErr := c.agent.BindingForResource(server.ResourceURL); bindErr == nil {
-			api.Profiles = map[string]*restish.ProfileConfig{"default": {Auth: &restish.AuthConfig{
-				Type: "dpop", Params: map[string]string{"source": "realmroot", "reference": binding.Reference},
-			}}}
-		} else if !errors.Is(bindErr, os.ErrNotExist) {
-			return nil, nil, fmt.Errorf("load credential binding for %s: %w", server.CommandName, bindErr)
 		}
 		config.APIs[server.CommandName] = api
 	}
