@@ -15,6 +15,7 @@ import (
 
 	"github.com/realmroot/toolbox/internal/access"
 	"github.com/realmroot/toolbox/internal/agent"
+	"github.com/realmroot/toolbox/internal/buildinfo"
 	"github.com/realmroot/toolbox/internal/catalog"
 	"github.com/realmroot/toolbox/internal/execution"
 	restish "github.com/saltbo/restish/v2"
@@ -45,8 +46,30 @@ func New(stdout, stderr io.Writer) *cobra.Command {
 	root.SetErr(stderr)
 	root.PersistentFlags().StringVar(&app.origin, "realmroot-origin", environment("REALMROOT_ORIGIN", agent.DefaultOrigin), "Realmroot deployment origin")
 	root.PersistentFlags().BoolVar(&app.json, "json", false, "print Toolbox and Agent results as JSON")
-	root.AddCommand(app.agentCommand(), app.toolboxCommand(), app.execCommand())
+	root.AddCommand(app.agentCommand(), app.toolboxCommand(), app.execCommand(), app.versionCommand())
 	return root
+}
+
+func (a *App) versionCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Print the installed Toolbox version",
+		Args:  cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			info := buildinfo.Current()
+			if a.json {
+				return a.printJSON(info)
+			}
+			fmt.Fprintf(a.stdout, "realmroot %s\n", info.Version)
+			if info.Commit != "" {
+				fmt.Fprintf(a.stdout, "commit: %s\n", info.Commit)
+			}
+			if info.BuildTime != "" {
+				fmt.Fprintf(a.stdout, "built: %s\n", info.BuildTime)
+			}
+			return nil
+		},
+	}
 }
 
 func (a *App) execCommand() *cobra.Command {

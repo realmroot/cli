@@ -19,6 +19,7 @@ make install
 ```console
 realmroot agent enroll
 realmroot agent whoami
+realmroot version
 realmroot toolbox
 realmroot toolbox github
 realmroot toolbox github context
@@ -39,6 +40,13 @@ realmroot exec github -- git fetch origin
 realmroot exec github -- gh pr list --repo realmroot/realmroot
 realmroot exec github --context realmroot -- gh pr merge 42 --repo realmroot/realmroot
 realmroot exec cloudflare -- wrangler deployments list --name realmroot-adapters
+```
+
+Release builds can embed traceable build information:
+
+```console
+make build VERSION=v0.2.0 COMMIT=<git-commit> BUILD_TIME=<rfc3339-time>
+realmroot version --json
 ```
 
 `realmroot exec <resource-server> -- <native-command>` runs only native tools

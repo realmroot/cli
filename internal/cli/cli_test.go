@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/realmroot/toolbox/internal/agent"
+	"github.com/realmroot/toolbox/internal/buildinfo"
 	"github.com/realmroot/toolbox/internal/catalog"
 	restish "github.com/saltbo/restish/v2"
 )
@@ -34,7 +35,7 @@ func TestRootHelpExposesOnlyProductCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	output := stdout.String()
-	for _, expected := range []string{"agent", "toolbox"} {
+	for _, expected := range []string{"agent", "toolbox", "version"} {
 		if !strings.Contains(output, expected) {
 			t.Fatalf("help omitted %s:\n%s", expected, output)
 		}
@@ -43,6 +44,41 @@ func TestRootHelpExposesOnlyProductCommands(t *testing.T) {
 		if strings.Contains(output, hidden) {
 			t.Fatalf("help exposed %s:\n%s", hidden, output)
 		}
+	}
+}
+
+func TestVersionCommandReportsBuildInformation(t *testing.T) {
+	// [spec: cli/cli-version]
+	original := buildinfo.Current()
+	buildinfo.Version = "v0.2.0"
+	buildinfo.Commit = "abc1234"
+	buildinfo.BuildTime = "2026-08-11T18:00:00Z"
+	t.Cleanup(func() {
+		buildinfo.Version = original.Version
+		buildinfo.Commit = original.Commit
+		buildinfo.BuildTime = original.BuildTime
+	})
+
+	var stdout, stderr bytes.Buffer
+	command := New(&stdout, &stderr)
+	command.SetArgs([]string{"version", "--json"})
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if got := stdout.String(); !strings.Contains(got, `"version": "v0.2.0"`) ||
+		!strings.Contains(got, `"commit": "abc1234"`) ||
+		!strings.Contains(got, `"buildTime": "2026-08-11T18:00:00Z"`) {
+		t.Fatalf("version output = %s", got)
+	}
+
+	stdout.Reset()
+	command = New(&stdout, &stderr)
+	command.SetArgs([]string{"version"})
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if got := stdout.String(); got != "realmroot v0.2.0\ncommit: abc1234\nbuilt: 2026-08-11T18:00:00Z\n" {
+		t.Fatalf("text version output = %q", got)
 	}
 }
 

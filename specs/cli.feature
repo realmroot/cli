@@ -1,5 +1,12 @@
 Feature: Realmroot Toolbox command line
 
+  @journey:cli-version @entrypoint:version
+  Scenario: Inspect the installed Toolbox build
+    When the Agent runs "realmroot version"
+    Then the command reports the Toolbox version
+    And release builds may also report their source commit and build time
+    And JSON output uses stable version, commit, and build time fields
+
   @journey:agent-enrollment @entrypoint:agent-enroll
   Scenario: Enroll a stable Agent identity
     Given the Agent is not enrolled with the selected Realmroot deployment
