@@ -56,13 +56,33 @@ func TestToolboxHelpDoesNotCallRealmroot(t *testing.T) {
 	if !strings.Contains(stdout.String(), "Discover and operate Resource Servers") {
 		t.Fatalf("help = %q", stdout.String())
 	}
+	for _, hidden := range []string{"--profile", "--auth", "--print", "Restish", "restish", "--rsh-"} {
+		if strings.Contains(stdout.String(), hidden) {
+			t.Fatalf("help exposed %q:\n%s", hidden, stdout.String())
+		}
+	}
 }
 
 func TestParseToolboxFlags(t *testing.T) {
 	app := &App{}
-	args, err := app.parseToolboxFlags([]string{"--json", "--search", "list zones", "--scope=zone.read", "--profile=staging", "--content-type", "json", "--validate", "github", "repos", "get"})
-	if err != nil || !app.json || app.search != "list zones" || app.scope != "zone.read" || app.profile != "staging" || strings.Join(args, " ") != "--rsh-profile=staging --rsh-content-type json --rsh-validate github repos get" {
-		t.Fatalf("args=%v json=%v search=%q scope=%q profile=%v err=%v", args, app.json, app.search, app.scope, app.profile, err)
+	args, err := app.parseToolboxFlags([]string{"--json", "--search", "list zones", "--scope=zone.read", "--content-type", "json", "--validate", "github", "repos", "get"})
+	if err != nil || !app.json || app.search != "list zones" || app.scope != "zone.read" || strings.Join(args, " ") != "--rsh-content-type json --rsh-validate github repos get" {
+		t.Fatalf("args=%v json=%v search=%q scope=%q err=%v", args, app.json, app.search, app.scope, err)
+	}
+}
+
+func TestParseToolboxFlagsRejectsInternalAndRemovedProductOptions(t *testing.T) {
+	for _, args := range [][]string{{"--rsh-profile", "staging"}, {"--profile", "staging"}, {"--profile=staging"}, {"--auth", "oauth"}, {"--auth=oauth"}, {"--print", "h"}, {"--print=h"}} {
+		if _, err := (&App{}).parseToolboxFlags(args); err == nil {
+			t.Fatalf("options %v were accepted", args)
+		}
+	}
+}
+
+func TestParseToolboxFlagsIncludesResponseHeadersThroughProductOption(t *testing.T) {
+	args, err := (&App{}).parseToolboxFlags([]string{"github", "repos", "get", "--include"})
+	if err != nil || strings.Join(args, " ") != "github repos get --rsh-print hb" {
+		t.Fatalf("args=%v err=%v", args, err)
 	}
 }
 
@@ -158,6 +178,20 @@ func TestInsufficientOperationAuthorityReportsActiveAndRequiredScopes(t *testing
 	}
 }
 
+func TestOperationHelpDoesNotRequireAgentAuthority(t *testing.T) {
+	err := prepareOperationCredentials(
+		&restish.Config{APIs: map[string]*restish.APIConfig{"github": {}}},
+		catalog.ResourceServer{CommandName: "github"},
+		githubOperationInspection(),
+		[]string{"issues", "issues-get", "--help"},
+		"default",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("operation help required authority: %v", err)
+	}
+}
+
 func githubOperationInspection() restish.APIInspection {
 	return restish.APIInspection{Operations: []restish.OperationInspection{{
 		ID: "issuesGet", Command: []string{"issues", "issues-get"}, Method: "GET", Path: "/repos/{owner}/{repo}/issues/{number}",
@@ -190,7 +224,7 @@ func TestResourceServerSummariesDoNotIncludePublishedScopes(t *testing.T) {
 		t.Fatal(err)
 	}
 	output := string(encoded)
-	if strings.Contains(output, `"scopes"`) || !strings.Contains(output, `"scopeCount":2`) || !strings.Contains(output, `"authorizedScopes":["zone.read"]`) {
+	if strings.Contains(output, `"scopes"`) || strings.Contains(output, `"id"`) || strings.Contains(output, `"available"`) || !strings.Contains(output, `"scopeCount":2`) || !strings.Contains(output, `"connectedAccountScopes":["zone.read"]`) {
 		t.Fatalf("summary JSON = %s", output)
 	}
 }
@@ -221,6 +255,20 @@ func TestLargeResourceServerOverviewIsCompact(t *testing.T) {
 	}
 }
 
+func TestCompactOverviewKeepsBoundedAuthorizationDetails(t *testing.T) {
+	server := catalog.ResourceServer{CommandName: "cloudflare", Scopes: make([]catalog.Scope, 252)}
+	details := make([]catalog.AuthorizationDetail, maxCompactAuthorization+1)
+	for index := range details {
+		details[index] = catalog.AuthorizationDetail{Name: "account", AuthorizationDetail: map[string]any{"type": "cloudflare_account"}}
+	}
+
+	overview := buildResourceServerOverview(server, details, makeOperations(80), discoveryOptions{})
+
+	if overview.Mode != overviewModeCompact || len(overview.AuthorizationDetails) != maxCompactAuthorization || !overview.AuthorizationTruncated {
+		t.Fatalf("overview = %#v", overview)
+	}
+}
+
 func TestResourceServerSearchIsBoundedAndKeepsOperationSecurity(t *testing.T) {
 	server := catalog.ResourceServer{CommandName: "cloudflare", Scopes: make([]catalog.Scope, 252)}
 	operations := makeOperations(80)
@@ -236,6 +284,30 @@ func TestResourceServerSearchIsBoundedAndKeepsOperationSecurity(t *testing.T) {
 	}
 	if got := operationScopeSummary(overview.Operations[0]); got != "workers-routes.read" {
 		t.Fatalf("scope summary = %q", got)
+	}
+}
+
+func TestScopeFilterKeepsOnlyMatchingScopeAlternativesAndHidesCredentialSchemes(t *testing.T) {
+	operations := []restish.OperationInspection{{
+		ID: "getContent", Command: []string{"repos", "get-content"}, Method: "GET", Path: "/repos/{owner}/{repo}/contents/{path}",
+		CredentialAlternatives: [][]restish.CredentialRequirementInspection{
+			{{ID: "realmrootOidc", Kind: "oauth2-dpop", Needs: []string{"contents:read"}}},
+			{{ID: "realmrootOidc", Kind: "oauth2-dpop", Needs: []string{"metadata:read"}}},
+		},
+	}}
+	overview := buildResourceServerOverview(catalog.ResourceServer{CommandName: "github"}, nil, operations, discoveryOptions{Scope: "contents:read"})
+
+	if got := operationScopeSummary(overview.Operations[0]); got != "contents:read" {
+		t.Fatalf("scope summary = %q", got)
+	}
+	encoded, err := json.Marshal(overview)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, internal := range []string{"realmrootOidc", "oauth2-dpop", "metadata:read", "credentialAlternatives"} {
+		if strings.Contains(string(encoded), internal) {
+			t.Fatalf("overview JSON exposed %q: %s", internal, encoded)
+		}
 	}
 }
 
@@ -277,12 +349,12 @@ func TestResourceServerAllExplicitlyExpandsLargeInventory(t *testing.T) {
 }
 
 func TestOperationScopeSummaryIncludesOnlyScopesAndDeduplicates(t *testing.T) {
-	operation := restish.OperationInspection{CredentialAlternatives: [][]restish.CredentialRequirementInspection{
+	operation := summarizeOperations([]restish.OperationInspection{{CredentialAlternatives: [][]restish.CredentialRequirementInspection{
 		{{ID: "oauth2", Needs: []string{"agents:read"}}},
 		{{ID: "anotherOAuth", Needs: []string{"agents:read"}}},
 		{{ID: "bearerAuth"}},
 		{{ID: "cookieAuth"}},
-	}}
+	}}}, "")[0]
 
 	if got := operationScopeSummary(operation); got != "agents:read" {
 		t.Fatalf("scope summary = %q", got)
@@ -290,10 +362,10 @@ func TestOperationScopeSummaryIncludesOnlyScopesAndDeduplicates(t *testing.T) {
 }
 
 func TestOperationScopeSummaryIsEmptyWithoutScopes(t *testing.T) {
-	operation := restish.OperationInspection{CredentialAlternatives: [][]restish.CredentialRequirementInspection{
+	operation := summarizeOperations([]restish.OperationInspection{{CredentialAlternatives: [][]restish.CredentialRequirementInspection{
 		{{ID: "bearerAuth"}},
 		{{ID: "cookieAuth"}},
-	}}
+	}}}, "")[0]
 
 	if got := operationScopeSummary(operation); got != "" {
 		t.Fatalf("scope summary = %q", got)
@@ -306,7 +378,7 @@ func TestFilteredOverviewOmitsScopeLineWithoutScopes(t *testing.T) {
 	overview := resourceServerOverview{
 		ResourceServer: resourceServerSummary{CommandName: "example", Identifier: "example"},
 		Mode:           overviewModeFiltered, MatchCount: 1,
-		Operations: []restish.OperationInspection{{Command: []string{"things", "list"}, Method: "GET"}},
+		Operations: []operationSummary{{Command: []string{"things", "list"}, Method: "GET"}},
 	}
 
 	if err := app.printResourceServerOverview(overview); err != nil {

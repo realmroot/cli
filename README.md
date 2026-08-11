@@ -2,8 +2,7 @@
 
 `realmroot` is an Agent-native command line for discovering Resource Servers,
 requesting task-scoped authority, and invoking OpenAPI-generated operations.
-Restish is an embedded internal engine: users do not install Restish, a plugin,
-or Rust.
+Users install one command and do not need a separate plugin or runtime.
 
 ## Install
 
@@ -63,14 +62,18 @@ Running `realmroot toolbox <resource-server>` prints that server's connection
 state and capability inventory. Small APIs include every published scope,
 authorization detail, and generated operation with its exact required scopes.
 Large APIs automatically use a compact summary so discovery cannot flood an
-Agent's context. Use `--search` to match commands, summaries, methods, paths,
-and operation IDs; use `--scope` to find operations requiring one exact scope.
-Search results have both row and output-size limits unless `--all` is explicit.
+Agent's context. Connected-account scopes and current Agent authority are
+labeled separately. Use `--search` to match commands, summaries, methods,
+paths, and operation IDs; use `--scope` to find operations requiring one exact
+scope. Scope-filtered results contain only the matching authorization
+alternatives. Search results have both row and output-size limits unless
+`--all` is explicit.
 
 The root `realmroot toolbox` inventory is always a Resource Server summary.
-Its JSON form includes `scopeCount` and currently authorized scopes, but not
-the complete requestable scope collection. Resource overview JSON follows the
-same expanded, compact, and filtered modes as text output.
+Its JSON form includes `scopeCount` and connected-account scopes, but not the
+complete requestable scope collection. Resource overview JSON follows the same
+expanded, compact, and filtered modes as text output and does not expose
+credential schemes or bindings.
 
 When a Resource Server returns the Realmroot interactive Resource profile, the
 same command opens its controller approval page, waits on the canonical
@@ -80,7 +83,9 @@ representation. Use `--no-browser` to print the URL without opening it.
 Only the generic `get`, `head`, `post`, `put`, `patch`, and `delete` operations
 are exposed alongside Resource Server commands. Engine configuration, plugin,
 and support commands remain private to the embedding runtime. Public flags use
-Toolbox names such as `--output`, `--header`, `--timeout`, and `--no-paginate`.
+Toolbox names such as `--output`, `--header`, `--include`, `--timeout`, and `--no-paginate`.
+Engine profiles and explicit credential selection are not part of the public
+command surface.
 
 ## Architecture
 

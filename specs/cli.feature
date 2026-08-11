@@ -18,8 +18,11 @@ Feature: Realmroot Toolbox command line
   Scenario: Inspect one Resource Server authority
     Given the Agent is enrolled
     When it runs "realmroot toolbox github"
-    Then the Resource Server scopes and current authorization state are displayed
+    Then connected-account scopes and current Agent authority are labeled separately
+    And authorization details include the exact request value without credential internals
+    And scope-filtered operations show only matching scope alternatives
     And its OpenAPI-generated operation groups are discoverable through command help
+    But large operation descriptions, schemas, examples, and response models do not flood ordinary help
 
   @journey:task-scoped-access @entrypoint:agent-request
   Scenario: Request exact Resource access

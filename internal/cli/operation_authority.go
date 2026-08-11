@@ -31,7 +31,7 @@ func prepareOperationCredentials(
 	binding *agent.CredentialBinding,
 ) error {
 	operation, selected := selectedOperation(inspection.Operations, args)
-	if selected && operationRequiresAuthority(operation) {
+	if selected && invocationRequiresAuthority(args) && operationRequiresAuthority(operation) {
 		if binding == nil {
 			return operationAuthorityError(server.CommandName, operation, nil)
 		}
@@ -77,6 +77,16 @@ func prepareOperationCredentials(
 		}
 	}
 	return nil
+}
+
+func invocationRequiresAuthority(args []string) bool {
+	for _, argument := range args {
+		switch argument {
+		case "--help", "-h", "--help-all", "--generate-body", "--rsh-generate-body":
+			return false
+		}
+	}
+	return true
 }
 
 func selectedOperation(operations []restish.OperationInspection, args []string) (restish.OperationInspection, bool) {
@@ -130,7 +140,7 @@ func operationCoveredByScopes(operation restish.OperationInspection, scopes []st
 }
 
 func operationAuthorityError(resourceServer string, operation restish.OperationInspection, activeScopes []string) error {
-	required := operationScopeSummary(operation)
+	required := operationScopeSummary(summarizeOperations([]restish.OperationInspection{operation}, "")[0])
 	if required == "" {
 		required = "authority declared by the operation"
 	}
