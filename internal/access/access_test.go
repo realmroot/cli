@@ -99,14 +99,13 @@ func TestReadyReceiptDoesNotExposeInternalCredentialBinding(t *testing.T) {
 		catalog.ResourceServer{CommandName: "github"},
 		"https://adapters.realmroot.dev/github",
 		[]string{"issues:read"},
-		[]map[string]any{{"type": "github_installation", "installation_id": "123"}},
 	)
 	encoded, err := json.Marshal(value)
 	if err != nil {
 		t.Fatal(err)
 	}
 	output := string(encoded)
-	if strings.Contains(output, "credentialSource") || strings.Contains(output, "reference") {
+	if strings.Contains(output, "credentialSource") || strings.Contains(output, "reference") || strings.Contains(output, "authorizationDetails") {
 		t.Fatalf("public receipt exposes internal credential binding: %s", output)
 	}
 	for _, expected := range []string{`"status":"ready"`, `"resourceServer":"github"`, `"scopes":["issues:read"]`} {

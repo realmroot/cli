@@ -14,6 +14,7 @@ import (
 
 type operationCredentialResolver interface {
 	BindingForScopeAlternatives(string, [][]string) (agent.CredentialBinding, error)
+	BindingForAuthorizationContextScopeAlternatives(string, []map[string]any, [][]string) (agent.CredentialBinding, error)
 }
 
 func resolveOperationCredentialBinding(
@@ -21,15 +22,23 @@ func resolveOperationCredentialBinding(
 	server catalog.ResourceServer,
 	inspection restish.APIInspection,
 	args []string,
+	authorizationDetails []map[string]any,
 ) (*agent.CredentialBinding, error) {
 	operation, selected := selectedOperation(inspection.Operations, args)
 	if !selected || !invocationRequiresAuthority(args) || !operationRequiresAuthority(operation) {
 		return nil, nil
 	}
-	binding, err := resolver.BindingForScopeAlternatives(
-		server.ResourceURL,
-		operationCredentialScopeAlternatives(operation),
-	)
+	var binding agent.CredentialBinding
+	var err error
+	if len(authorizationDetails) > 0 {
+		binding, err = resolver.BindingForAuthorizationContextScopeAlternatives(
+			server.ResourceURL, authorizationDetails, operationCredentialScopeAlternatives(operation),
+		)
+	} else {
+		binding, err = resolver.BindingForScopeAlternatives(
+			server.ResourceURL, operationCredentialScopeAlternatives(operation),
+		)
+	}
 	if err == nil {
 		return &binding, nil
 	}

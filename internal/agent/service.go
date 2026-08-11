@@ -206,10 +206,79 @@ func (s *Service) AcceptAccessOffer(offer AccessOffer) (CredentialBinding, error
 	if reference == "" {
 		return CredentialBinding{}, errors.New("stored credential source reference is missing")
 	}
-	if err := s.storeActiveBinding(offer.ResourceIndicator, CredentialBinding{Reference: reference, Scopes: offer.Scopes}); err != nil {
-		return CredentialBinding{}, err
-	}
 	return CredentialBinding{Reference: reference, Scopes: append([]string(nil), offer.Scopes...)}, nil
+}
+
+type selectedContexts struct {
+	Version int                         `json:"version"`
+	Items   map[string][]map[string]any `json:"items"`
+}
+
+func (s *Service) SelectedContext(resourceIndicator string) ([]map[string]any, error) {
+	data, err := os.ReadFile(filepath.Join(s.states.root, "contexts.json"))
+	if err != nil {
+		return nil, err
+	}
+	var contexts selectedContexts
+	if err := json.Unmarshal(data, &contexts); err != nil {
+		return nil, fmt.Errorf("decode selected Resource Server contexts: %w", err)
+	}
+	if contexts.Version != 1 {
+		return nil, errors.New("selected Resource Server contexts have an unsupported version")
+	}
+	details := contexts.Items[resourceIndicator]
+	if len(details) == 0 {
+		return nil, os.ErrNotExist
+	}
+	return cloneAuthorizationDetails(details), nil
+}
+
+func (s *Service) StoreContext(resourceIndicator string, details []map[string]any) error {
+	path := filepath.Join(s.states.root, "contexts.json")
+	contexts := selectedContexts{Version: 1, Items: map[string][]map[string]any{}}
+	if data, err := os.ReadFile(path); err == nil {
+		if err := json.Unmarshal(data, &contexts); err != nil {
+			return fmt.Errorf("decode selected Resource Server contexts: %w", err)
+		}
+		if contexts.Version != 1 {
+			return errors.New("selected Resource Server contexts have an unsupported version")
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if contexts.Items == nil {
+		contexts.Items = make(map[string][]map[string]any)
+	}
+	contexts.Items[resourceIndicator] = cloneAuthorizationDetails(details)
+	data, err := json.MarshalIndent(contexts, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	temporary, err := os.CreateTemp(filepath.Dir(path), ".contexts-*.json")
+	if err != nil {
+		return err
+	}
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	if err := temporary.Chmod(0o600); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if _, err := temporary.Write(append(data, '\n')); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Sync(); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	return os.Rename(temporaryPath, path)
 }
 
 func (s *Service) BindingForResource(resourceIndicator string) (CredentialBinding, error) {
@@ -321,6 +390,37 @@ func (s *Service) BindingForAuthorizationContext(resourceIndicator string, detai
 		}, nil
 	}
 	return CredentialBinding{}, AuthorizationContext{}, os.ErrNotExist
+}
+
+func (s *Service) BindingForAuthorizationContextAllAuthority(resourceIndicator string, details []map[string]any) (CredentialBinding, error) {
+	sources, err := s.credentialSourcesForResource(resourceIndicator)
+	if err != nil {
+		return CredentialBinding{}, err
+	}
+	for _, source := range sources {
+		if sameAuthorizationDetails(source.source.AuthorizationDetails, details) {
+			return bindingForSource(source), nil
+		}
+	}
+	return CredentialBinding{}, os.ErrNotExist
+}
+
+func (s *Service) BindingForAuthorizationContextScopeAlternatives(resourceIndicator string, details []map[string]any, alternatives [][]string) (CredentialBinding, error) {
+	sources, err := s.credentialSourcesForResource(resourceIndicator)
+	if err != nil {
+		return CredentialBinding{}, err
+	}
+	for _, source := range sources {
+		if !sameAuthorizationDetails(source.source.AuthorizationDetails, details) {
+			continue
+		}
+		offer, ok := leastPrivilegeOffer(source.source.Offers, alternatives)
+		if !ok {
+			return CredentialBinding{}, os.ErrNotExist
+		}
+		return CredentialBinding{Reference: source.reference, Scopes: normalizedBindingScopes(offer.Scopes)}, nil
+	}
+	return CredentialBinding{}, os.ErrNotExist
 }
 
 func (s *Service) BindingForReferenceScopeAlternatives(resourceIndicator, reference string, alternatives [][]string) (CredentialBinding, error) {

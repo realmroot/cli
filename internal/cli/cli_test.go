@@ -93,12 +93,33 @@ func TestParseToolboxFlags(t *testing.T) {
 
 func TestParseExecFlagsPreservesNativeArgumentsAfterSeparator(t *testing.T) {
 	app := &App{}
-	args, options, err := app.parseExecFlags([]string{"--json", "--scope", "pull_requests:read", "github", "--", "gh", "pr", "list", "--json"})
+	args, options, err := app.parseExecFlags([]string{"--json", "--context", "realmroot", "github", "--", "gh", "pr", "list", "--json"})
 	if err != nil || !app.json || strings.Join(args, " ") != "github -- gh pr list --json" {
 		t.Fatalf("args=%v json=%v err=%v", args, app.json, err)
 	}
-	if len(options.scopes) != 1 || options.scopes[0] != "pull_requests:read" {
+	if options.context != "realmroot" {
 		t.Fatalf("options = %#v", options)
+	}
+}
+
+func TestResourceServerContextUsesDisplayContractWithoutRawDetails(t *testing.T) {
+	// [spec: cli/resource-server-context]
+	details := []catalog.AuthorizationDetail{{
+		Name: "realmroot", Description: "Organization GitHub App installation",
+		AuthorizationDetail:        map[string]any{"type": "github_installation", "installation_id": "42"},
+		Metadata:                   map[string]string{"accountType": "Organization"},
+		AccountAuthorizationStatus: "authorized", AuthorizedScopes: []string{"issues:read"},
+	}}
+	selected := []map[string]any{{"type": "github_installation", "installation_id": "42"}}
+	summaries := listContexts(details, selected)
+	encoded, err := json.Marshal(summaries)
+	if err != nil {
+		t.Fatal(err)
+	}
+	output := string(encoded)
+	if !summaries[0].Current || !strings.Contains(output, `"name":"realmroot"`) ||
+		strings.Contains(output, "installation_id") || strings.Contains(output, "authorizationDetail") {
+		t.Fatalf("Context summaries = %s", output)
 	}
 }
 
@@ -214,6 +235,10 @@ func (r *recordingOperationCredentialResolver) BindingForScopeAlternatives(resou
 	return r.binding, r.err
 }
 
+func (r *recordingOperationCredentialResolver) BindingForAuthorizationContextScopeAlternatives(resource string, _ []map[string]any, alternatives [][]string) (agent.CredentialBinding, error) {
+	return r.BindingForScopeAlternatives(resource, alternatives)
+}
+
 func TestResolveOperationCredentialBindingSelectsExistingOfferForOperation(t *testing.T) {
 	resolver := &recordingOperationCredentialResolver{binding: agent.CredentialBinding{
 		Reference: "selected-reference", Scopes: []string{"issues:read"},
@@ -225,6 +250,7 @@ func TestResolveOperationCredentialBindingSelectsExistingOfferForOperation(t *te
 		server,
 		githubOperationInspection(),
 		[]string{"issues", "issues-get"},
+		nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -242,6 +268,7 @@ func TestResolveOperationCredentialBindingDoesNotResolveHelp(t *testing.T) {
 		catalog.ResourceServer{CommandName: "github", ResourceURL: "https://api.example.com/github"},
 		githubOperationInspection(),
 		[]string{"issues", "issues-get", "--help"},
+		nil,
 	)
 	if err != nil || binding != nil || resolver.resource != "" {
 		t.Fatalf("binding = %#v, resource = %q, error = %v", binding, resolver.resource, err)
@@ -255,6 +282,7 @@ func TestResolveOperationCredentialBindingReportsMissingExistingOffer(t *testing
 		catalog.ResourceServer{CommandName: "github", ResourceURL: "https://api.example.com/github"},
 		githubOperationInspection(),
 		[]string{"issues", "issues-get"},
+		nil,
 	)
 	if err == nil || !strings.Contains(err.Error(), "no approved Agent authority") || !strings.Contains(err.Error(), "issues:read") {
 		t.Fatalf("error = %v", err)
@@ -359,7 +387,7 @@ func TestSmallResourceServerOverviewIncludesCompleteInventory(t *testing.T) {
 
 	overview := buildResourceServerOverview(server, details, operations, discoveryOptions{})
 
-	if overview.Mode != overviewModeExpanded || len(overview.Scopes) != 1 || len(overview.AuthorizationDetails) != 1 || len(overview.Operations) != 1 {
+	if overview.Mode != overviewModeExpanded || len(overview.Scopes) != 1 || len(overview.Contexts) != 1 || len(overview.Operations) != 1 {
 		t.Fatalf("overview = %#v", overview)
 	}
 }
@@ -387,7 +415,7 @@ func TestCompactOverviewKeepsBoundedAuthorizationDetails(t *testing.T) {
 
 	overview := buildResourceServerOverview(server, details, makeOperations(80), discoveryOptions{})
 
-	if overview.Mode != overviewModeCompact || len(overview.AuthorizationDetails) != maxCompactAuthorization || !overview.AuthorizationTruncated {
+	if overview.Mode != overviewModeCompact || len(overview.Contexts) != maxCompactAuthorization || !overview.ContextTruncated {
 		t.Fatalf("overview = %#v", overview)
 	}
 }

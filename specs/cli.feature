@@ -19,15 +19,26 @@ Feature: Realmroot Toolbox command line
     Given the Agent is enrolled
     When it runs "realmroot toolbox github"
     Then connected-account scopes and current Agent authority are labeled separately
-    And authorization details include the exact request value without credential internals
+    And available Contexts are summarized without authorization-detail or credential internals
     And scope-filtered operations show only matching scope alternatives
     And its OpenAPI-generated operation groups are discoverable through command help
     But large operation descriptions, schemas, examples, and response models do not flood ordinary help
 
+  @journey:resource-server-context @entrypoint:toolbox-context
+  Scenario: Inspect and select one Resource Server Context
+    Given the Resource Server exposes one or more Contexts with service-defined names and attributes
+    When the Agent runs "realmroot toolbox github context"
+    Then Toolbox lists only the Context name, authorization status, and current selection
+    And Context details show the Resource Server supplied description and attributes
+    When the Agent runs "realmroot toolbox github context use realmroot"
+    Then subsequent GitHub operations use that Context by default
+    And "--context" can override it for one operation without changing the default
+    But authorization details and credential references are never exposed
+
   @journey:task-scoped-access @entrypoint:agent-request
   Scenario: Request exact Resource access
-    Given the Agent selected scopes from published Resource Server metadata and OpenAPI security
-    When it runs "realmroot agent request" with the Resource Server and scopes
+    Given the Agent selected a Context and scopes from Resource Server discovery
+    When it runs "realmroot agent request" with the Resource Server, Context, and scopes
     Then any required account connection is established or expanded for the requested authority
     And any required controller interaction is opened and polled
     And the resulting credential offer is stored without a target private key or access token
@@ -37,7 +48,7 @@ Feature: Realmroot Toolbox command line
   Scenario: Invoke an OpenAPI-generated Resource operation
     Given one or more approved credential offers are stored for the Resource Server
     When the Agent invokes the generated Toolbox operation
-    Then Toolbox automatically selects an existing authorization context and least-privileged offer that covers the operation
+    Then Toolbox uses the selected Context and automatically chooses approved authority that covers the operation
     And Restish sends the request directly to the Resource Server with the selected proof-bound credential
     And missing authority is reported using Realmroot Resource Server and scope vocabulary
     But embedded engine profiles, credential bindings, and setup commands are never exposed
@@ -45,9 +56,9 @@ Feature: Realmroot Toolbox command line
   @journey:native-resource-tool @entrypoint:exec
   Scenario: Run a native tool with approved Agent authority
     Given a Resource Server advertises a supported native tool integration
-    And an approved credential offer is actively bound to that Resource Server
+    And the selected Context has approved authority for that Resource Server
     When the Agent runs "realmroot exec" for that Resource Server and native command
-    Then the command uses a process-local authenticated broker backed by the active proof-bound credential
+    Then the command uses a process-local authenticated broker backed by the selected Context's approved authority
     And provider credentials are never written to disk or exposed to the child process
     And the command exit status and terminal signals are preserved
     But the command never requests or expands Resource authority

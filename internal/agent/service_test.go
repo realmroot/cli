@@ -11,6 +11,26 @@ import (
 
 const secondCredentialSourceReference = "rrcs_ZmVkY2JhOTg3NjU0MzIxMA"
 
+func TestSelectedContextIsIndependentFromCredentialBindings(t *testing.T) {
+	service, resource := serviceWithCredentialSources(t, map[string]credentialSource{
+		testCredentialSourceReference: sourceWithScopes(t, "workspace-1", []string{"files:read"}),
+	})
+	details := []map[string]any{{"type": "workspace", "identifier": "workspace-2"}}
+	if err := service.StoreContext(resource, details); err != nil {
+		t.Fatal(err)
+	}
+	selected, err := service.SelectedContext(resource)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameAuthorizationDetails(selected, details) {
+		t.Fatalf("selected Context = %#v", selected)
+	}
+	if _, err := service.activeBinding(resource); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("Context selection changed credential binding: %v", err)
+	}
+}
+
 func TestBindingForScopeAlternativesReusesOlderOfferInActiveContext(t *testing.T) {
 	service, resource := serviceWithCredentialSources(t, map[string]credentialSource{
 		testCredentialSourceReference: sourceWithScopes(t, "workspace-1", []string{"files:read"}, []string{"files:write"}),

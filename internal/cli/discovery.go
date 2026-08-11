@@ -54,20 +54,20 @@ type operationSummary struct {
 }
 
 type resourceServerOverview struct {
-	ResourceServer           resourceServerSummary         `json:"resourceServer"`
-	Mode                     string                        `json:"mode"`
-	ScopeCount               int                           `json:"-"`
-	AuthorizationDetailCount int                           `json:"authorizationDetailCount"`
-	OperationCount           int                           `json:"operationCount"`
-	Search                   string                        `json:"search,omitempty"`
-	Scope                    string                        `json:"scope,omitempty"`
-	MatchCount               int                           `json:"matchCount,omitempty"`
-	Truncated                bool                          `json:"truncated,omitempty"`
-	AuthorizationTruncated   bool                          `json:"authorizationDetailsTruncated,omitempty"`
-	Scopes                   []catalog.Scope               `json:"scopes,omitempty"`
-	AuthorizationDetails     []catalog.AuthorizationDetail `json:"authorizationDetails,omitempty"`
-	Operations               []operationSummary            `json:"operations,omitempty"`
-	NativeCommands           []string                      `json:"nativeCommands,omitempty"`
+	ResourceServer   resourceServerSummary `json:"resourceServer"`
+	Mode             string                `json:"mode"`
+	ScopeCount       int                   `json:"-"`
+	ContextCount     int                   `json:"contextCount"`
+	OperationCount   int                   `json:"operationCount"`
+	Search           string                `json:"search,omitempty"`
+	Scope            string                `json:"scope,omitempty"`
+	MatchCount       int                   `json:"matchCount,omitempty"`
+	Truncated        bool                  `json:"truncated,omitempty"`
+	ContextTruncated bool                  `json:"contextsTruncated,omitempty"`
+	Scopes           []catalog.Scope       `json:"scopes,omitempty"`
+	Contexts         []contextListItem     `json:"contexts,omitempty"`
+	Operations       []operationSummary    `json:"operations,omitempty"`
+	NativeCommands   []string              `json:"nativeCommands,omitempty"`
 }
 
 type nativeToolSummary struct {
@@ -95,7 +95,7 @@ func summarizeResourceServer(server catalog.ResourceServer) resourceServerSummar
 func buildResourceServerOverview(server catalog.ResourceServer, details []catalog.AuthorizationDetail, operations []restish.OperationInspection, options discoveryOptions) resourceServerOverview {
 	overview := resourceServerOverview{
 		ResourceServer: summarizeResourceServer(server), ScopeCount: len(server.Scopes),
-		AuthorizationDetailCount: len(details), OperationCount: len(operations), Search: options.Search, Scope: options.Scope,
+		ContextCount: len(details), OperationCount: len(operations), Search: options.Search, Scope: options.Scope,
 	}
 	if options.Search != "" || options.Scope != "" {
 		overview.Mode = overviewModeFiltered
@@ -109,16 +109,16 @@ func buildResourceServerOverview(server catalog.ResourceServer, details []catalo
 	}
 	if !options.All && resourceServerInventoryIsLarge(server, details, operations) {
 		overview.Mode = overviewModeCompact
-		overview.AuthorizationDetails = append([]catalog.AuthorizationDetail(nil), details...)
-		if len(overview.AuthorizationDetails) > maxCompactAuthorization {
-			overview.AuthorizationDetails = overview.AuthorizationDetails[:maxCompactAuthorization]
-			overview.AuthorizationTruncated = true
+		overview.Contexts = listContexts(details, nil)
+		if len(overview.Contexts) > maxCompactAuthorization {
+			overview.Contexts = overview.Contexts[:maxCompactAuthorization]
+			overview.ContextTruncated = true
 		}
 		return overview
 	}
 	overview.Mode = overviewModeExpanded
 	overview.Scopes = append([]catalog.Scope(nil), server.Scopes...)
-	overview.AuthorizationDetails = append([]catalog.AuthorizationDetail(nil), details...)
+	overview.Contexts = listContexts(details, nil)
 	overview.Operations = summarizeOperations(operations, "")
 	return overview
 }

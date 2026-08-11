@@ -15,11 +15,10 @@ import (
 )
 
 type Receipt struct {
-	Status               string           `json:"status"`
-	ResourceServer       string           `json:"resourceServer"`
-	ResourceIndicator    string           `json:"resourceIndicator"`
-	Scopes               []string         `json:"scopes"`
-	AuthorizationDetails []map[string]any `json:"authorizationDetails,omitempty"`
+	Status            string   `json:"status"`
+	ResourceServer    string   `json:"resourceServer"`
+	ResourceIndicator string   `json:"resourceIndicator"`
+	Scopes            []string `json:"scopes"`
 }
 
 type Service struct {
@@ -117,7 +116,7 @@ func (s *Service) Request(ctx context.Context, server catalog.ResourceServer, sc
 			if err != nil {
 				return Receipt{}, fmt.Errorf("store approved credential offer: %w", err)
 			}
-			return receipt(server, offer.ResourceIndicator, polled.JSON200.Scopes, authorization), nil
+			return receipt(server, offer.ResourceIndicator, polled.JSON200.Scopes), nil
 		}
 		if status != "pending" {
 			return Receipt{}, fmt.Errorf("controller access interaction %s", status)
@@ -136,7 +135,7 @@ func (s *Service) Request(ctx context.Context, server catalog.ResourceServer, sc
 	if err != nil {
 		return Receipt{}, fmt.Errorf("store approved credential offer: %w", err)
 	}
-	return receipt(server, offer.ResourceIndicator, current.Scopes, authorization), nil
+	return receipt(server, offer.ResourceIndicator, current.Scopes), nil
 }
 
 func (s *Service) connect(ctx context.Context, server catalog.ResourceServer, scopes []string, authorizationDetails []map[string]any, reason string) error {
@@ -277,8 +276,8 @@ func wait(ctx context.Context, duration time.Duration) error {
 	}
 }
 
-func receipt(server catalog.ResourceServer, resource string, scopes []string, details []map[string]any) Receipt {
-	return Receipt{Status: "ready", ResourceServer: server.CommandName, ResourceIndicator: resource, Scopes: scopes, AuthorizationDetails: details}
+func receipt(server catalog.ResourceServer, resource string, scopes []string) Receipt {
+	return Receipt{Status: "ready", ResourceServer: server.CommandName, ResourceIndicator: resource, Scopes: scopes}
 }
 
 func apiError(operation string, status int, body []byte) error {

@@ -19,11 +19,12 @@ make install
 ```console
 realmroot agent enroll
 realmroot agent whoami
-realmroot agent request --resource-server github --scope contents:read
-realmroot agent use github
-realmroot agent use github --authorization-detail '{"type":"github_installation","installation_id":"152329382","account_login":"realmroot","target_type":"Organization","repository_selection":"all"}'
 realmroot toolbox
 realmroot toolbox github
+realmroot toolbox github context
+realmroot toolbox github context show realmroot
+realmroot toolbox github context use realmroot
+realmroot agent request --resource-server github --context realmroot --scope contents:read
 realmroot toolbox cloudflare --search "list zones"
 realmroot toolbox cloudflare --scope zone.read
 realmroot toolbox cloudflare --all
@@ -36,7 +37,7 @@ realmroot exec
 realmroot exec github
 realmroot exec github -- git fetch origin
 realmroot exec github -- gh pr list --repo realmroot/realmroot
-realmroot exec github --scope contents:write -- gh pr merge 42 --repo realmroot/realmroot
+realmroot exec github --context realmroot -- gh pr merge 42 --repo realmroot/realmroot
 realmroot exec cloudflare -- wrangler deployments list --name realmroot-adapters
 ```
 
@@ -60,25 +61,18 @@ returns a short-lived asset-upload credential, the broker keeps it in memory
 and accepts it only for that account's asset-upload path during the same exec
 session.
 
-Generated Toolbox operations automatically select the least-privileged stored
-credential offer that covers the operation. A later access request does not
-hide older approved offers in the same authorization context.
+Use `realmroot toolbox <resource-server> context` to list accounts, workspaces,
+installations, or other Contexts defined by that Resource Server. `context show`
+prints its service-defined description and safe attributes; `context use`
+selects the default. Context selection is independent of permission requests
+and credential storage.
 
-`exec` consumes the exact active credential offer selected by the most recent
-access request or generated Toolbox operation; it never opens approval,
-requests access, or expands scopes.
-
-Use `realmroot agent use <resource-server>` to inspect approved authorization
-contexts and select one with `--authorization-detail`. This changes only the
-default account, installation, or other authorization context; it does not
-request access. Native REST, Git Smart HTTP, and Wrangler requests can follow a
-standard insufficient-scope challenge by switching to an already approved
-least-privileged offer in that same context. Use repeatable `realmroot exec
---scope` flags when an opaque native protocol such as GraphQL does not advertise
-the operation scopes. An `exec --authorization-detail` value overrides the
-context only for that child process; persistent selection remains the
-responsibility of `agent use`. `exec` never switches authorization contexts or
-requests new authority automatically.
+Generated operations automatically choose the least-privileged approved offer
+inside the selected Context. `agent request`, generated operations, and `exec`
+accept `--context <name>` as a one-command override without changing the
+default. `exec` uses all already-approved authority in that Context so opaque
+native protocols such as GraphQL work without exposing scope-selection or
+credential-selection internals. It never requests or expands authority.
 
 `platform` is reserved and always maps to the Resource Server whose published
 identifier is `realmroot`. Resource Server names also cannot collide with the
@@ -86,7 +80,7 @@ generic HTTP verbs.
 
 Running `realmroot toolbox <resource-server>` prints that server's connection
 state and capability inventory. Small APIs include every published scope,
-authorization detail, and generated operation with its exact required scopes.
+Context summary, and generated operation with its exact required scopes.
 Large APIs automatically use a compact summary so discovery cannot flood an
 Agent's context. Connected-account scopes and current Agent authority are
 labeled separately. Use `--search` to match commands, summaries, methods,
@@ -111,7 +105,8 @@ are exposed alongside Resource Server commands. Engine configuration, plugin,
 and support commands remain private to the embedding runtime. Public flags use
 Toolbox names such as `--output`, `--header`, `--include`, `--timeout`, and `--no-paginate`.
 Engine profiles and explicit credential selection are not part of the public
-command surface.
+command surface. Authorization-detail payloads and credential references remain
+internal and are never printed as Context selection instructions.
 
 ## Architecture
 
