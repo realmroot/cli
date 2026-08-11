@@ -613,7 +613,7 @@ func configureRestishPaths() error {
 		if err != nil {
 			return fmt.Errorf("resolve cache directory: %w", err)
 		}
-		return os.Setenv("RSH_CACHE_DIR", filepath.Join(cacheDirectory, "realmroot", "restish"))
+		return os.Setenv("RSH_CACHE_DIR", filepath.Join(cacheDirectory, "realmroot", "restish", "v2"))
 	}
 	return nil
 }
