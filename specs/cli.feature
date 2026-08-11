@@ -34,3 +34,29 @@ Feature: Realmroot Toolbox command line
     Given an approved credential offer is bound to the Resource Server
     When the Agent invokes the generated Toolbox operation
     Then Restish sends the request directly to the Resource Server with a proof-bound credential
+
+  @journey:native-resource-tool @entrypoint:exec
+  Scenario: Run a native tool with approved Agent authority
+    Given a Resource Server advertises a supported native tool integration
+    And an approved credential offer is actively bound to that Resource Server
+    When the Agent runs "realmroot exec" for that Resource Server and native command
+    Then the command uses a process-local authenticated broker backed by the active proof-bound credential
+    And provider credentials are never written to disk or exposed to the child process
+    And the command exit status and terminal signals are preserved
+    But the command never requests or expands Resource authority
+
+  @journey:github-native-tools @entrypoint:exec
+  Scenario: Use Git and GitHub CLI as the stable Agent
+    Given GitHub advertises Git and GitHub CLI integrations
+    And the Agent has approved GitHub repository authority
+    When it runs Git or GitHub CLI through "realmroot exec github"
+    Then GitHub API, GraphQL, clone, fetch, pull, and push traffic is routed through the GitHub Resource Server
+    And local commits use the stable Agent name and email without changing global Git configuration
+
+  @journey:cloudflare-native-tool @entrypoint:exec
+  Scenario: Use Wrangler as the stable Agent
+    Given Cloudflare advertises a Wrangler integration
+    And the Agent has approved Cloudflare authority
+    When it runs Wrangler through "realmroot exec cloudflare"
+    Then Wrangler API traffic is routed through the Cloudflare Resource Server
+    And existing Cloudflare credentials are removed from the child environment

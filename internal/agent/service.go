@@ -22,6 +22,11 @@ type Identity struct {
 	Subject string `json:"subject"`
 }
 
+type ExecutionIdentity struct {
+	Name  string
+	Email string
+}
+
 type AccessOffer struct {
 	AgentID              string
 	Scopes               []string
@@ -60,6 +65,8 @@ func NewService(origin string, client *http.Client) (*Service, error) {
 func (s *Service) Origin() string { return s.origin }
 
 func (s *Service) APIBaseURL() string { return s.origin + "/api" }
+
+func (s *Service) HTTPClient() *http.Client { return s.client }
 
 func (s *Service) OpenApproval(rawURL string) error { return s.opener.Open(rawURL) }
 
@@ -111,6 +118,25 @@ func (s *Service) WhoAmI(ctx context.Context) (Identity, error) {
 		return Identity{}, errors.New("Realmroot Agent enrollment is incomplete; run `realmroot agent enroll`")
 	}
 	return publicIdentity(state.Identity), nil
+}
+
+func (s *Service) ExecutionIdentity(ctx context.Context) (ExecutionIdentity, error) {
+	_, target, err := s.configurationAndTarget(ctx)
+	if err != nil {
+		return ExecutionIdentity{}, err
+	}
+	state, err := loadAgentRegistration(s.states, target)
+	if err != nil {
+		return ExecutionIdentity{}, err
+	}
+	if state.Identity == nil {
+		return ExecutionIdentity{}, errors.New("Realmroot Agent enrollment is incomplete; run `realmroot agent enroll`")
+	}
+	name := strings.TrimSpace(state.Name)
+	if name == "" {
+		name = "Realmroot Agent"
+	}
+	return ExecutionIdentity{Name: name, Email: state.Identity.Subject + "@agents.realmroot.dev"}, nil
 }
 
 func publicIdentity(identity *stableIdentity) Identity {
@@ -175,7 +201,7 @@ func (s *Service) AcceptAccessOffer(offer AccessOffer) (CredentialBinding, error
 	if reference == "" {
 		return CredentialBinding{}, errors.New("stored credential source reference is missing")
 	}
-	if err := s.storeActiveBinding(offer.ResourceIndicator, reference); err != nil {
+	if err := s.storeActiveBinding(offer.ResourceIndicator, CredentialBinding{Reference: reference, Scopes: offer.Scopes}); err != nil {
 		return CredentialBinding{}, err
 	}
 	return CredentialBinding{Reference: reference, Scopes: append([]string(nil), offer.Scopes...)}, nil
@@ -187,7 +213,7 @@ func (s *Service) BindingForResource(resourceIndicator string) (CredentialBindin
 		return CredentialBinding{}, err
 	}
 	var binding *CredentialBinding
-	activeReference, activeErr := s.activeBinding(resourceIndicator)
+	active, activeErr := s.activeBinding(resourceIndicator)
 	if activeErr != nil && !errors.Is(activeErr, os.ErrNotExist) {
 		return CredentialBinding{}, activeErr
 	}
@@ -199,7 +225,7 @@ func (s *Service) BindingForResource(resourceIndicator string) (CredentialBindin
 			if source.ResourceIndicator != resourceIndicator {
 				continue
 			}
-			if activeReference != "" && reference != activeReference {
+			if active.Reference != "" && reference != active.Reference {
 				continue
 			}
 			if len(source.Offers) == 0 {
@@ -208,9 +234,11 @@ func (s *Service) BindingForResource(resourceIndicator string) (CredentialBindin
 			if binding != nil && binding.Reference != reference {
 				return errors.New("multiple authorization contexts exist for this Resource Server")
 			}
-			scopes := make([]string, 0)
+			scopes := append([]string(nil), active.Scopes...)
 			for _, offer := range source.Offers {
-				scopes = append(scopes, offer.Scopes...)
+				if len(active.Scopes) == 0 {
+					scopes = append(scopes, offer.Scopes...)
+				}
 			}
 			binding = &CredentialBinding{Reference: reference, Scopes: uniqueStrings(scopes)}
 		}
@@ -222,8 +250,8 @@ func (s *Service) BindingForResource(resourceIndicator string) (CredentialBindin
 	if binding == nil {
 		return CredentialBinding{}, os.ErrNotExist
 	}
-	if activeReference == "" {
-		if err := s.storeActiveBinding(resourceIndicator, binding.Reference); err != nil {
+	if active.Reference == "" {
+		if err := s.storeActiveBinding(resourceIndicator, *binding); err != nil {
 			return CredentialBinding{}, err
 		}
 	}
@@ -231,44 +259,80 @@ func (s *Service) BindingForResource(resourceIndicator string) (CredentialBindin
 }
 
 type activeBindings struct {
-	Version int               `json:"version"`
-	Items   map[string]string `json:"items"`
+	Version int                                `json:"version"`
+	Items   map[string]activeCredentialBinding `json:"items"`
 }
 
-func (s *Service) activeBinding(resourceIndicator string) (string, error) {
+type activeCredentialBinding struct {
+	Reference string   `json:"reference"`
+	Scopes    []string `json:"scopes"`
+}
+
+func (s *Service) activeBinding(resourceIndicator string) (CredentialBinding, error) {
 	data, err := os.ReadFile(filepath.Join(s.states.root, "bindings.json"))
 	if err != nil {
-		return "", err
+		return CredentialBinding{}, err
 	}
 	var bindings activeBindings
-	if err := json.Unmarshal(data, &bindings); err != nil {
-		return "", fmt.Errorf("decode active credential bindings: %w", err)
+	if err := json.Unmarshal(data, &bindings); err == nil && bindings.Version == 2 {
+		binding := bindings.Items[resourceIndicator]
+		if binding.Reference == "" {
+			return CredentialBinding{}, os.ErrNotExist
+		}
+		return CredentialBinding{Reference: binding.Reference, Scopes: append([]string(nil), binding.Scopes...)}, nil
 	}
-	if bindings.Version != 1 {
-		return "", errors.New("active credential bindings have an unsupported version")
+	var legacy struct {
+		Version int               `json:"version"`
+		Items   map[string]string `json:"items"`
 	}
-	reference := bindings.Items[resourceIndicator]
+	if err := json.Unmarshal(data, &legacy); err != nil {
+		return CredentialBinding{}, fmt.Errorf("decode active credential bindings: %w", err)
+	}
+	if legacy.Version != 1 {
+		return CredentialBinding{}, errors.New("active credential bindings have an unsupported version")
+	}
+	reference := legacy.Items[resourceIndicator]
 	if reference == "" {
-		return "", os.ErrNotExist
+		return CredentialBinding{}, os.ErrNotExist
 	}
-	return reference, nil
+	return CredentialBinding{Reference: reference}, nil
 }
 
-func (s *Service) storeActiveBinding(resourceIndicator, reference string) error {
+func (s *Service) storeActiveBinding(resourceIndicator string, binding CredentialBinding) error {
 	path := filepath.Join(s.states.root, "bindings.json")
-	bindings := activeBindings{Version: 1, Items: map[string]string{}}
+	bindings := activeBindings{Version: 2, Items: map[string]activeCredentialBinding{}}
 	if data, err := os.ReadFile(path); err == nil {
-		if err := json.Unmarshal(data, &bindings); err != nil {
+		var stored struct {
+			Version int `json:"version"`
+		}
+		if err := json.Unmarshal(data, &stored); err != nil {
 			return fmt.Errorf("decode active credential bindings: %w", err)
+		}
+		if stored.Version == 2 {
+			if err := json.Unmarshal(data, &bindings); err != nil {
+				return fmt.Errorf("decode active credential bindings: %w", err)
+			}
+		} else if stored.Version == 1 {
+			var legacy struct {
+				Items map[string]string `json:"items"`
+			}
+			if err := json.Unmarshal(data, &legacy); err != nil {
+				return fmt.Errorf("decode active credential bindings: %w", err)
+			}
+			for resource, reference := range legacy.Items {
+				bindings.Items[resource] = activeCredentialBinding{Reference: reference}
+			}
+		} else {
+			return errors.New("active credential bindings have an unsupported version")
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	bindings.Version = 1
+	bindings.Version = 2
 	if bindings.Items == nil {
-		bindings.Items = make(map[string]string)
+		bindings.Items = make(map[string]activeCredentialBinding)
 	}
-	bindings.Items[resourceIndicator] = reference
+	bindings.Items[resourceIndicator] = activeCredentialBinding{Reference: binding.Reference, Scopes: uniqueStrings(binding.Scopes)}
 	data, err := json.MarshalIndent(bindings, "", "  ")
 	if err != nil {
 		return err

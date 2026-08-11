@@ -31,7 +31,26 @@ realmroot toolbox github repos repos-get saltbo restish
 realmroot toolbox platform agents list-agents --limit 1 --no-paginate
 realmroot toolbox get https://example.com/status
 realmroot toolbox agent-wallet wallet show --json
+realmroot exec github -- git fetch origin
+realmroot exec github -- gh pr list --repo realmroot/realmroot
+realmroot exec cloudflare -- wrangler deployments list --name realmroot-adapters
 ```
+
+`realmroot exec <resource-server> -- <native-command>` runs only native tools
+advertised by that Resource Server. Git, GitHub CLI, and Wrangler keep their
+normal command syntax, terminal behavior, and exit status. The child process
+receives a high-entropy process-local broker credential, never the GitHub App
+installation token or Cloudflare OAuth token. Existing provider credentials
+are removed from its environment.
+
+GitHub execution supports REST, GraphQL, and Git Smart HTTP. Git commits made
+through `realmroot exec github -- git ...` use the stable Agent name and
+`<subject>@agents.realmroot.dev` email without changing repository or global
+Git configuration. Cloudflare execution redirects Wrangler's API base to the
+Cloudflare Resource Server and retains its native subcommands.
+
+`exec` consumes the exact active credential binding created by `realmroot
+agent request`; it never opens approval, requests access, or expands scopes.
 
 `platform` is reserved and always maps to the Resource Server whose published
 identifier is `realmroot`. Resource Server names also cannot collide with the

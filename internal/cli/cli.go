@@ -16,6 +16,7 @@ import (
 	"github.com/realmroot/toolbox/internal/access"
 	"github.com/realmroot/toolbox/internal/agent"
 	"github.com/realmroot/toolbox/internal/catalog"
+	"github.com/realmroot/toolbox/internal/execution"
 	restish "github.com/saltbo/restish/v2"
 	"github.com/spf13/cobra"
 )
@@ -44,8 +45,47 @@ func New(stdout, stderr io.Writer) *cobra.Command {
 	root.SetErr(stderr)
 	root.PersistentFlags().StringVar(&app.origin, "realmroot-origin", environment("REALMROOT_ORIGIN", agent.DefaultOrigin), "Realmroot deployment origin")
 	root.PersistentFlags().BoolVar(&app.json, "json", false, "print Toolbox and Agent results as JSON")
-	root.AddCommand(app.agentCommand(), app.toolboxCommand())
+	root.AddCommand(app.agentCommand(), app.toolboxCommand(), app.execCommand())
 	return root
+}
+
+func (a *App) execCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:                "exec <resource-server> -- <native-command> [args...]",
+		Short:              "Run a native tool with approved Agent authority",
+		DisableFlagParsing: true,
+		Args:               cobra.ArbitraryArgs,
+		RunE: func(command *cobra.Command, args []string) error {
+			if len(args) == 1 && (args[0] == "--help" || args[0] == "-h") {
+				return command.Help()
+			}
+			if len(args) < 2 {
+				return errors.New("usage: realmroot exec <resource-server> -- <native-command> [args...]")
+			}
+			resourceServer := args[0]
+			args = args[1:]
+			if args[0] == "--" {
+				args = args[1:]
+			}
+			if len(args) == 0 {
+				return errors.New("native command is required after --")
+			}
+			service, catalogClient, httpClient, err := a.services()
+			if err != nil {
+				return err
+			}
+			server, err := catalogClient.Find(command.Context(), resourceServer)
+			if err != nil {
+				return err
+			}
+			integrations, err := catalogClient.ToolIntegrations(command.Context(), server)
+			if err != nil {
+				return err
+			}
+			runner := execution.NewRunner(service, httpClient, command.InOrStdin(), a.stdout, a.stderr)
+			return runner.Run(command.Context(), server, integrations, args)
+		},
+	}
 }
 
 func (a *App) agentCommand() *cobra.Command {

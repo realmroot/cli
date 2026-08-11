@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -17,7 +18,7 @@ import (
 var reservedNames = map[string]bool{
 	"platform": true, "get": true, "head": true, "post": true,
 	"put": true, "patch": true, "delete": true, "help": true,
-	"completion": true, "version": true,
+	"completion": true, "version": true, "exec": true,
 }
 
 type Scope struct {
@@ -46,6 +47,12 @@ type AuthorizationDetail struct {
 	AuthorizedScopes           []string          `json:"authorizedScopes"`
 	RequestableScopes          []string          `json:"requestableScopes"`
 	Metadata                   map[string]string `json:"metadata"`
+}
+
+type ToolIntegration struct {
+	ID          string   `json:"id"`
+	Executables []string `json:"executables"`
+	Protocol    string   `json:"protocol"`
 }
 
 type Client struct {
@@ -160,6 +167,36 @@ func (c *Client) AuthorizationDetails(ctx context.Context, server ResourceServer
 		offset = response.JSON200.Pagination.NextOffset
 	}
 	return result, nil
+}
+
+func (c *Client) ToolIntegrations(ctx context.Context, server ResourceServer) ([]ToolIntegration, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, server.ResourceURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	response, err := c.agent.HTTPClient().Do(request)
+	if err != nil {
+		return nil, fmt.Errorf("read %s native tool integrations: %w", server.CommandName, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("read %s native tool integrations: HTTP %d", server.CommandName, response.StatusCode)
+	}
+	var document struct {
+		ToolIntegrations []ToolIntegration `json:"toolIntegrations"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&document); err != nil {
+		return nil, fmt.Errorf("decode %s native tool integrations: %w", server.CommandName, err)
+	}
+	if len(document.ToolIntegrations) == 0 {
+		return nil, fmt.Errorf("Resource Server %q does not advertise native tool integrations", server.CommandName)
+	}
+	for _, integration := range document.ToolIntegrations {
+		if integration.ID == "" || integration.Protocol == "" || len(integration.Executables) == 0 {
+			return nil, fmt.Errorf("Resource Server %q advertises an invalid native tool integration", server.CommandName)
+		}
+	}
+	return document.ToolIntegrations, nil
 }
 
 func (c *Client) RestishConfig(ctx context.Context) (*restish.Config, []ResourceServer, error) {
