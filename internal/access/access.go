@@ -28,7 +28,14 @@ type Receipt struct {
 
 type Service struct {
 	agent *agent.Service
-	api   *realmrootapi.ClientWithResponses
+	api   realmrootClient
+}
+
+type realmrootClient interface {
+	CreateAgentAuthorizationRequestWithResponse(context.Context, realmrootapi.CreateAgentAuthorizationRequestJSONRequestBody, ...realmrootapi.RequestEditorFn) (*realmrootapi.CreateAgentAuthorizationRequestResponse, error)
+	GetAgentAuthorizationRequestWithResponse(context.Context, string, ...realmrootapi.RequestEditorFn) (*realmrootapi.GetAgentAuthorizationRequestResponse, error)
+	CreateConnectionRequestWithResponse(context.Context, string, realmrootapi.CreateConnectionRequestJSONRequestBody, ...realmrootapi.RequestEditorFn) (*realmrootapi.CreateConnectionRequestResponse, error)
+	GetConnectionRequestWithResponse(context.Context, string, string, ...realmrootapi.RequestEditorFn) (*realmrootapi.GetConnectionRequestResponse, error)
 }
 
 func New(agentService *agent.Service, httpClient realmrootapi.HttpRequestDoer) (*Service, error) {
@@ -50,7 +57,7 @@ func (s *Service) Request(ctx context.Context, server catalog.ResourceServer, sc
 	if reason = strings.TrimSpace(reason); reason == "" {
 		reason = "Perform the requested operation on the selected Resource Server"
 	}
-	if server.ConnectionStatus == "not_connected" {
+	if server.ConnectionStatus != "not_required" {
 		if err := s.connect(ctx, server, scopes, authorizationDetails, reason); err != nil {
 			return Receipt{}, err
 		}
