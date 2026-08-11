@@ -10,7 +10,9 @@ or Rust.
 Go 1.25.3 or newer is the only build prerequisite.
 
 ```console
-go install github.com/realmroot/toolbox/cmd/realmroot@latest
+git clone https://github.com/realmroot/toolbox.git
+cd toolbox
+make install
 ```
 
 ## Commands
@@ -21,24 +23,42 @@ realmroot agent whoami
 realmroot agent request --resource-server github --scope contents:read
 realmroot toolbox
 realmroot toolbox github
+realmroot toolbox cloudflare --search "list zones"
+realmroot toolbox cloudflare --scope zone.read
+realmroot toolbox cloudflare --all
 realmroot toolbox github repos repos-get --help
 realmroot toolbox github repos repos-get saltbo restish
-realmroot toolbox platform agents list-agents --limit 1 --rsh-no-paginate
+realmroot toolbox platform agents list-agents --limit 1 --no-paginate
 realmroot toolbox get https://example.com/status
+realmroot toolbox agent-wallet wallet show --json
 ```
 
 `platform` is reserved and always maps to the Resource Server whose published
 identifier is `realmroot`. Resource Server names also cannot collide with the
 generic HTTP verbs.
 
-Running `realmroot toolbox <resource-server>` prints that server's published
-scopes, connection state, current authorization state, and requestable scopes.
-Generated operation help prints the OpenAPI security scheme and scopes, so an
-Agent can reason about the exact access request before calling an operation.
+Running `realmroot toolbox <resource-server>` prints that server's connection
+state and capability inventory. Small APIs include every published scope,
+authorization detail, and generated operation with its exact required scopes.
+Large APIs automatically use a compact summary so discovery cannot flood an
+Agent's context. Use `--search` to match commands, summaries, methods, paths,
+and operation IDs; use `--scope` to find operations requiring one exact scope.
+Search results have both row and output-size limits unless `--all` is explicit.
 
-Only `get`, `head`, `post`, `put`, `patch`, and `delete` from Restish are
-exposed. Restish configuration, plugin, and support commands remain private to
-the embedding runtime.
+The root `realmroot toolbox` inventory is always a Resource Server summary.
+Its JSON form includes `scopeCount` and currently authorized scopes, but not
+the complete requestable scope collection. Resource overview JSON follows the
+same expanded, compact, and filtered modes as text output.
+
+When a Resource Server returns the Realmroot interactive Resource profile, the
+same command opens its controller approval page, waits on the canonical
+Resource URL using the authenticated client, and prints the terminal
+representation. Use `--no-browser` to print the URL without opening it.
+
+Only the generic `get`, `head`, `post`, `put`, `patch`, and `delete` operations
+are exposed alongside Resource Server commands. Engine configuration, plugin,
+and support commands remain private to the embedding runtime. Public flags use
+Toolbox names such as `--output`, `--header`, `--timeout`, and `--no-paginate`.
 
 ## Architecture
 

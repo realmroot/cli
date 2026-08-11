@@ -63,7 +63,7 @@ func New(service *agent.Service, httpClient realmrootapi.HttpRequestDoer) (*Clie
 
 func (c *Client) List(ctx context.Context) ([]ResourceServer, error) {
 	limit, offset := 100, 0
-	var result []ResourceServer
+	result := make([]ResourceServer, 0)
 	for {
 		response, err := c.api.ListResourceServersWithResponse(ctx, &realmrootapi.ListResourceServersParams{Limit: &limit, Offset: &offset}, c.editor("resource-servers:read"))
 		if err != nil {
@@ -130,7 +130,7 @@ func (c *Client) Find(ctx context.Context, commandName string) (ResourceServer, 
 
 func (c *Client) AuthorizationDetails(ctx context.Context, server ResourceServer) ([]AuthorizationDetail, error) {
 	limit, offset := 100, 0
-	var result []AuthorizationDetail
+	result := make([]AuthorizationDetail, 0)
 	for {
 		response, err := c.api.ListResourceServerAuthorizationDetailsWithResponse(ctx, server.ID,
 			&realmrootapi.ListResourceServerAuthorizationDetailsParams{Limit: &limit, Offset: &offset}, c.editor("authorization-details:read"))

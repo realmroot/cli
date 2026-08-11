@@ -1,4 +1,4 @@
-.PHONY: generate test verify build
+.PHONY: generate test verify build install
 
 generate:
 	test -n "$(REALMROOT_OPENAPI)"
@@ -8,7 +8,9 @@ test:
 	go test ./...
 
 build:
-	go build ./cmd/realmroot
+	go build ./...
+
+install:
+	go build -o "$$(go env GOPATH)/bin/realmroot" .
 
 verify: test build
-
