@@ -63,11 +63,47 @@ func TestToolboxHelpDoesNotCallRealmroot(t *testing.T) {
 	}
 }
 
+func TestExecHelpExplainsDiscoveryAndExecution(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	command := New(&stdout, &stderr)
+	command.SetArgs([]string{"exec", "--help"})
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	output := stdout.String()
+	for _, expected := range []string{
+		"Run without arguments to list every available native command",
+		"realmroot exec github",
+		"realmroot exec github -- git fetch origin",
+		"realmroot exec cloudflare -- wrangler deployments list",
+	} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("help omitted %q:\n%s", expected, output)
+		}
+	}
+}
+
 func TestParseToolboxFlags(t *testing.T) {
 	app := &App{}
 	args, err := app.parseToolboxFlags([]string{"--json", "--search", "list zones", "--scope=zone.read", "--content-type", "json", "--validate", "github", "repos", "get"})
 	if err != nil || !app.json || app.search != "list zones" || app.scope != "zone.read" || strings.Join(args, " ") != "--rsh-content-type json --rsh-validate github repos get" {
 		t.Fatalf("args=%v json=%v search=%q scope=%q err=%v", args, app.json, app.search, app.scope, err)
+	}
+}
+
+func TestParseExecFlagsPreservesNativeArgumentsAfterSeparator(t *testing.T) {
+	app := &App{}
+	args, err := app.parseExecFlags([]string{"--json", "github", "--", "gh", "pr", "list", "--json"})
+	if err != nil || !app.json || strings.Join(args, " ") != "github -- gh pr list --json" {
+		t.Fatalf("args=%v json=%v err=%v", args, app.json, err)
+	}
+}
+
+func TestParseExecFlagsAcceptsRealmrootOriginBeforeSeparator(t *testing.T) {
+	app := &App{}
+	args, err := app.parseExecFlags([]string{"--realmroot-origin=https://id.example", "github"})
+	if err != nil || app.origin != "https://id.example" || strings.Join(args, " ") != "github" {
+		t.Fatalf("args=%v origin=%q err=%v", args, app.origin, err)
 	}
 }
 
@@ -386,6 +422,51 @@ func TestFilteredOverviewOmitsScopeLineWithoutScopes(t *testing.T) {
 	}
 	if strings.Contains(stdout.String(), "scopes:") {
 		t.Fatalf("output contains an empty scope line:\n%s", stdout.String())
+	}
+}
+
+func TestResourceServerOverviewAdvertisesNativeCommands(t *testing.T) {
+	var stdout bytes.Buffer
+	app := &App{stdout: &stdout}
+	overview := resourceServerOverview{
+		ResourceServer: resourceServerSummary{CommandName: "github", Identifier: "github", Name: "GitHub"},
+		Mode:           overviewModeCompact,
+		NativeCommands: []string{"git", "gh"},
+	}
+
+	if err := app.printResourceServerOverview(overview); err != nil {
+		t.Fatal(err)
+	}
+	output := stdout.String()
+	for _, expected := range []string{
+		"Native commands:",
+		"realmroot exec github -- git <arguments>",
+		"realmroot exec github -- gh <arguments>",
+	} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("output omitted %q:\n%s", expected, output)
+		}
+	}
+}
+
+func TestNativeToolSummaryListsExactCommandForms(t *testing.T) {
+	var stdout bytes.Buffer
+	app := &App{stdout: &stdout}
+	if err := app.printNativeToolSummary(nativeToolSummary{
+		ResourceServer: "cloudflare",
+		Commands:       []string{"wrangler", "npx wrangler", "pnpm wrangler"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	output := stdout.String()
+	for _, expected := range []string{
+		"realmroot exec cloudflare -- wrangler <arguments>",
+		"realmroot exec cloudflare -- npx wrangler <arguments>",
+		"realmroot exec cloudflare -- pnpm wrangler <arguments>",
+	} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("output omitted %q:\n%s", expected, output)
+		}
 	}
 }
 

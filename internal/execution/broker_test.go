@@ -130,6 +130,17 @@ func TestNativeResourceToolRejectsUnadvertisedExecutables(t *testing.T) {
 	}
 }
 
+func TestNativeCommandsDescribeWrappedWranglerExecutables(t *testing.T) {
+	t.Parallel()
+	commands := NativeCommands([]catalog.ToolIntegration{
+		{ID: "git", Executables: []string{"git"}, Protocol: "git-smart-http"},
+		{ID: "wrangler", Executables: []string{"wrangler", "npx", "pnpm"}, Protocol: "cloudflare-api-base"},
+	})
+	if got := strings.Join(commands, ", "); got != "git, wrangler, npx wrangler, pnpm wrangler" {
+		t.Fatalf("commands = %q", got)
+	}
+}
+
 func TestCloudflareNativeToolEnvironmentRemovesProviderCredentials(t *testing.T) {
 	t.Parallel()
 	values := cleanEnvironment([]string{"PATH=/bin", "CLOUDFLARE_API_TOKEN=secret", "CF_API_KEY=secret", "SAFE=value"}, providerCredentialNames("wrangler"))

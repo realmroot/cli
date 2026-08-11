@@ -67,6 +67,12 @@ type resourceServerOverview struct {
 	Scopes                   []catalog.Scope               `json:"scopes,omitempty"`
 	AuthorizationDetails     []catalog.AuthorizationDetail `json:"authorizationDetails,omitempty"`
 	Operations               []operationSummary            `json:"operations,omitempty"`
+	NativeCommands           []string                      `json:"nativeCommands,omitempty"`
+}
+
+type nativeToolSummary struct {
+	ResourceServer string   `json:"resourceServer"`
+	Commands       []string `json:"commands"`
 }
 
 func summarizeResourceServers(servers []catalog.ResourceServer) []resourceServerSummary {

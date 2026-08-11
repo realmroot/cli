@@ -30,6 +30,8 @@ realmroot toolbox github repos repos-get saltbo restish
 realmroot toolbox platform agents list-agents --limit 1 --no-paginate
 realmroot toolbox get https://example.com/status
 realmroot toolbox agent-wallet wallet show --json
+realmroot exec
+realmroot exec github
 realmroot exec github -- git fetch origin
 realmroot exec github -- gh pr list --repo realmroot/realmroot
 realmroot exec cloudflare -- wrangler deployments list --name realmroot-adapters
@@ -41,6 +43,10 @@ normal command syntax, terminal behavior, and exit status. The child process
 receives a high-entropy process-local broker credential, never the GitHub App
 installation token or Cloudflare OAuth token. Existing provider credentials
 are removed from its environment.
+
+Run `realmroot exec` to list every advertised native command, or `realmroot
+exec <resource-server>` to inspect one Resource Server. The same native command
+inventory is included in `realmroot toolbox <resource-server>` output.
 
 GitHub execution supports REST, GraphQL, and Git Smart HTTP. Git commits made
 through `realmroot exec github -- git ...` use the stable Agent name and

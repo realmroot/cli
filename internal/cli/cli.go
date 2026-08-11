@@ -50,18 +50,52 @@ func New(stdout, stderr io.Writer) *cobra.Command {
 
 func (a *App) execCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:                "exec <resource-server> -- <native-command> [args...]",
-		Short:              "Run a native tool with approved Agent authority",
+		Use:   "exec [resource-server [-- native-command [args...]]]",
+		Short: "Run a native tool with approved Agent authority",
+		Long:  "Discover native commands advertised by Resource Servers, or run one with approved Agent authority. Run without arguments to list every available native command.",
+		Example: strings.Join([]string{
+			"realmroot exec",
+			"realmroot exec github",
+			"realmroot exec github -- git fetch origin",
+			"realmroot exec github -- gh pr list",
+			"realmroot exec cloudflare -- wrangler deployments list",
+		}, "\n"),
 		DisableFlagParsing: true,
 		Args:               cobra.ArbitraryArgs,
 		RunE: func(command *cobra.Command, args []string) error {
+			var err error
+			args, err = a.parseExecFlags(args)
+			if err != nil {
+				return err
+			}
 			if len(args) == 1 && (args[0] == "--help" || args[0] == "-h") {
 				return command.Help()
 			}
-			if len(args) < 2 {
-				return errors.New("usage: realmroot exec <resource-server> -- <native-command> [args...]")
+			service, catalogClient, httpClient, err := a.services()
+			if err != nil {
+				return err
+			}
+			if len(args) == 0 {
+				return a.listNativeTools(command.Context(), catalogClient)
 			}
 			resourceServer := args[0]
+			server, err := catalogClient.Find(command.Context(), resourceServer)
+			if err != nil {
+				return err
+			}
+			integrations, err := catalogClient.ToolIntegrations(command.Context(), server)
+			if err != nil {
+				if len(args) == 1 && errors.Is(err, catalog.ErrNoToolIntegrations) {
+					return a.printNativeToolSummary(nativeToolSummary{ResourceServer: server.CommandName})
+				}
+				return err
+			}
+			if len(args) == 1 || (len(args) == 2 && (args[1] == "--help" || args[1] == "-h")) {
+				return a.printNativeToolSummary(nativeToolSummary{
+					ResourceServer: server.CommandName,
+					Commands:       execution.NativeCommands(integrations),
+				})
+			}
 			args = args[1:]
 			if args[0] == "--" {
 				args = args[1:]
@@ -69,22 +103,34 @@ func (a *App) execCommand() *cobra.Command {
 			if len(args) == 0 {
 				return errors.New("native command is required after --")
 			}
-			service, catalogClient, httpClient, err := a.services()
-			if err != nil {
-				return err
-			}
-			server, err := catalogClient.Find(command.Context(), resourceServer)
-			if err != nil {
-				return err
-			}
-			integrations, err := catalogClient.ToolIntegrations(command.Context(), server)
-			if err != nil {
-				return err
-			}
 			runner := execution.NewRunner(service, httpClient, command.InOrStdin(), a.stdout, a.stderr)
 			return runner.Run(command.Context(), server, integrations, args)
 		},
 	}
+}
+
+func (a *App) parseExecFlags(args []string) ([]string, error) {
+	result := make([]string, 0, len(args))
+	for index := 0; index < len(args); index++ {
+		argument := args[index]
+		switch {
+		case argument == "--":
+			return append(result, args[index:]...), nil
+		case argument == "--json":
+			a.json = true
+		case argument == "--realmroot-origin":
+			if index+1 >= len(args) {
+				return nil, errors.New("--realmroot-origin requires a value")
+			}
+			index++
+			a.origin = args[index]
+		case strings.HasPrefix(argument, "--realmroot-origin="):
+			a.origin = strings.TrimPrefix(argument, "--realmroot-origin=")
+		default:
+			result = append(result, argument)
+		}
+	}
+	return result, nil
 }
 
 func (a *App) agentCommand() *cobra.Command {
@@ -393,6 +439,12 @@ func (a *App) showResourceServer(ctx context.Context, service *agent.Service, cl
 		return err
 	}
 	overview := buildResourceServerOverview(server, details, inspection.Operations, a.discoveryOptions())
+	integrations, integrationsErr := client.ToolIntegrations(ctx, server)
+	if integrationsErr == nil {
+		overview.NativeCommands = execution.NativeCommands(integrations)
+	} else if !errors.Is(integrationsErr, catalog.ErrNoToolIntegrations) {
+		return integrationsErr
+	}
 	if binding, bindErr := service.BindingForResource(server.ResourceURL); bindErr == nil {
 		overview.ResourceServer.AgentAuthorityScopes = append([]string(nil), binding.Scopes...)
 	} else if !errors.Is(bindErr, os.ErrNotExist) {
@@ -419,6 +471,7 @@ func (a *App) printResourceServerOverview(overview resourceServerOverview) error
 	} else {
 		fmt.Fprintln(a.stdout, "Agent authority: not requested")
 	}
+	a.printNativeCommands(server.CommandName, overview.NativeCommands)
 	if overview.Mode == overviewModeCompact {
 		fmt.Fprintf(a.stdout, "\nCapabilities:\n  Operations: %d\n  Published scopes: %d\n  Authorization details: %d\n", overview.OperationCount, overview.ScopeCount, overview.AuthorizationDetailCount)
 		a.printAuthorizationDetails(overview)
@@ -472,6 +525,65 @@ func (a *App) printResourceServerOverview(overview resourceServerOverview) error
 		fmt.Fprintf(a.stdout, "\nShowing %d of %d matches. Add --all to show every match.\n", len(overview.Operations), overview.MatchCount)
 	}
 	return nil
+}
+
+func (a *App) listNativeTools(ctx context.Context, client *catalog.Client) error {
+	servers, err := client.List(ctx)
+	if err != nil {
+		return err
+	}
+	summaries := make([]nativeToolSummary, 0)
+	for _, server := range servers {
+		integrations, integrationsErr := client.ToolIntegrations(ctx, server)
+		if errors.Is(integrationsErr, catalog.ErrNoToolIntegrations) {
+			continue
+		}
+		if integrationsErr != nil {
+			return integrationsErr
+		}
+		summaries = append(summaries, nativeToolSummary{
+			ResourceServer: server.CommandName,
+			Commands:       execution.NativeCommands(integrations),
+		})
+	}
+	if a.json {
+		return a.printJSON(summaries)
+	}
+	if len(summaries) == 0 {
+		fmt.Fprintln(a.stdout, "No Resource Servers advertise native commands.")
+		return nil
+	}
+	w := tabwriter.NewWriter(a.stdout, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(w, "RESOURCE SERVER\tCOMMANDS")
+	for _, summary := range summaries {
+		fmt.Fprintf(w, "%s\t%s\n", summary.ResourceServer, strings.Join(summary.Commands, ", "))
+	}
+	return w.Flush()
+}
+
+func (a *App) printNativeToolSummary(summary nativeToolSummary) error {
+	if a.json {
+		return a.printJSON(summary)
+	}
+	if len(summary.Commands) == 0 {
+		fmt.Fprintf(a.stdout, "Resource Server %q does not advertise native commands.\n", summary.ResourceServer)
+		return nil
+	}
+	fmt.Fprintf(a.stdout, "Native commands for %s:\n", summary.ResourceServer)
+	for _, nativeCommand := range summary.Commands {
+		fmt.Fprintf(a.stdout, "  realmroot exec %s -- %s <arguments>\n", summary.ResourceServer, nativeCommand)
+	}
+	return nil
+}
+
+func (a *App) printNativeCommands(resourceServer string, commands []string) {
+	if len(commands) == 0 {
+		return
+	}
+	fmt.Fprintln(a.stdout, "\nNative commands:")
+	for _, nativeCommand := range commands {
+		fmt.Fprintf(a.stdout, "  realmroot exec %s -- %s <arguments>\n", resourceServer, nativeCommand)
+	}
 }
 
 func (a *App) discoveryOptions() discoveryOptions {
