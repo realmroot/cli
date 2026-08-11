@@ -108,8 +108,8 @@ github.com/rivo/uniseg v0.4.7/go.mod h1:FN3SvrM+Zdj16jyLfmOkMNblXMcoc8DfTHruCPUc
 github.com/rogpeppe/go-internal v1.14.1 h1:UQB4HGPB6osV0SQTLymcB4TgvyWu6ZyliaW0tI/otEQ=
 github.com/rogpeppe/go-internal v1.14.1/go.mod h1:MaRKkUm5W0goXpeCfT7UZI6fk/L7L7so1lCWt35ZSgc=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
-github.com/saltbo/restish/v2 v2.3.1-0.20260811032540-b5f33068956c h1:s23ng8plcvAvjj+CAMUYacYnEoddT9Ui+YfL71GPyIE=
-github.com/saltbo/restish/v2 v2.3.1-0.20260811032540-b5f33068956c/go.mod h1:5i2g3d6x84yp4NvJ8c7gUPYoMSeaeXIUizC3CQLpHRU=
+github.com/saltbo/restish/v2 v2.3.1-0.20260811033252-f30ad105b653 h1:kwV6mhiY2hDKmjvSl/+7cW47tio+UN8VEG5GlS3Df/8=
+github.com/saltbo/restish/v2 v2.3.1-0.20260811033252-f30ad105b653/go.mod h1:nB2f22CFu5X6R8Az9GDJ5+WTobImIs4l2cgczEUSWQY=
 github.com/sandrolain/httpcache v1.4.0 h1:Jf4Vx62X2ybvNPSpPvI1kT3xvMdDG1AsApQjOQKO9E0=
 github.com/sandrolain/httpcache v1.4.0/go.mod h1:kHBuXveitSn39SNPBhdf/ybG272X706HJ2RJqOQ+Em0=
 github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 h1:KRzFb2m7YtdldCEkzs6KqmJw4nqEVZGK7IN2kJkjTuQ=

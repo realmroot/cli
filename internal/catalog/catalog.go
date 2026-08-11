@@ -11,7 +11,7 @@ import (
 
 	"github.com/realmroot/toolbox/internal/agent"
 	"github.com/realmroot/toolbox/internal/realmrootapi"
-	restish "github.com/rest-sh/restish/v2"
+	restish "github.com/saltbo/restish/v2"
 )
 
 var reservedNames = map[string]bool{

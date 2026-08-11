@@ -48,9 +48,9 @@ the embedding runtime.
   `internal/realmrootapi`; they are not handwritten HTTP requests.
 - Resource Server operation trees are generated at runtime from each server's
   published OpenAPI document by embedded Restish.
-- The current Restish fork is pinned to an immutable commit. Once the embed
-  changes are upstream, the replace directive can be removed without changing
-  Toolbox commands or Agent logic.
+- The current Restish fork module is pinned to an immutable commit. Once the
+  embed changes are upstream, only the module import path changes; Toolbox
+  commands and Agent logic remain unchanged.
 
 Credential offers are stored under `~/.config/realmroot/agents` by default.
 Access tokens and target-resource private keys are never persisted.

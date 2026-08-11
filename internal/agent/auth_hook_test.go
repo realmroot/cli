@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rest-sh/restish/v2/plugin"
+	"github.com/saltbo/restish/v2/plugin"
 )
 
 const testCredentialSourceReference = "rrcs_MDEyMzQ1Njc4OWFiY2RlZg"

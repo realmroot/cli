@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	restish "github.com/rest-sh/restish/v2"
+	restish "github.com/saltbo/restish/v2"
 )
 
 const DefaultOrigin = "https://id.realmroot.dev"

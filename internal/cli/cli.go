@@ -16,7 +16,7 @@ import (
 	"github.com/realmroot/toolbox/internal/access"
 	"github.com/realmroot/toolbox/internal/agent"
 	"github.com/realmroot/toolbox/internal/catalog"
-	restish "github.com/rest-sh/restish/v2"
+	restish "github.com/saltbo/restish/v2"
 	"github.com/spf13/cobra"
 )
 

@@ -4,7 +4,7 @@ go 1.25.3
 
 require (
 	github.com/oapi-codegen/runtime v1.6.0
-	github.com/rest-sh/restish/v2 v2.3.0
+	github.com/saltbo/restish/v2 v2.3.1-0.20260811033252-f30ad105b653
 	github.com/spf13/cobra v1.10.2
 )
 
@@ -65,5 +65,3 @@ require (
 	golang.org/x/term v0.41.0 // indirect
 	golang.org/x/text v0.34.0 // indirect
 )
-
-replace github.com/rest-sh/restish/v2 => github.com/saltbo/restish/v2 v2.3.1-0.20260811032540-b5f33068956c
