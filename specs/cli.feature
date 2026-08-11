@@ -60,3 +60,4 @@ Feature: Realmroot Toolbox command line
     When it runs Wrangler through "realmroot exec cloudflare"
     Then Wrangler API traffic is routed through the Cloudflare Resource Server
     And existing Cloudflare credentials are removed from the child environment
+    And Cloudflare asset-upload credentials remain process-local and are accepted only for their matching upload session

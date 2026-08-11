@@ -48,14 +48,7 @@ func (r *Runner) Run(ctx context.Context, server catalog.ResourceServer, integra
 	environment := cleanEnvironment(os.Environ(), providerCredentialNames(integration.ID))
 	switch integration.Protocol {
 	case "cloudflare-api-base":
-		base, err := broker.StartTCP(func(request *http.Request) (string, error) {
-			if !strings.HasPrefix(request.URL.Path, "/client/v4") {
-				return "", errors.New("Wrangler request is outside Cloudflare API v4")
-			}
-			return strings.TrimPrefix(request.URL.RequestURI(), "/client/v4"), nil
-		}, func(request *http.Request) bool {
-			return request.Header.Get("Authorization") == "Bearer "+broker.SessionToken()
-		})
+		base, err := broker.StartCloudflareAPIBase("https://api.cloudflare.com/client/v4")
 		if err != nil {
 			return err
 		}

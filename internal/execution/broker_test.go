@@ -1,6 +1,7 @@
 package execution
 
 import (
+	"compress/gzip"
 	"context"
 	"io"
 	"net/http"
@@ -50,6 +51,74 @@ func TestNativeResourceToolUsesEphemeralDPoPBroker(t *testing.T) {
 	}
 	if source.scopes != "resource:read" {
 		t.Fatalf("issued scopes = %q", source.scopes)
+	}
+}
+
+func TestCloudflareBrokerUsesCapturedAssetUploadCredentialOnlyForItsSession(t *testing.T) {
+	t.Parallel()
+	var adapterRequests, providerRequests int
+	adapter := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		adapterRequests++
+		if request.Header.Get("Authorization") != "DPoP resource-token" || request.Header.Get("DPoP") == "" {
+			t.Fatalf("adapter request did not use the Agent credential")
+		}
+		response.Header().Set("Content-Type", "application/json")
+		response.Header().Set("Content-Encoding", "gzip")
+		compressed := gzip.NewWriter(response)
+		_, _ = compressed.Write([]byte(`{"result":{"jwt":"asset-session"}}`))
+		_ = compressed.Close()
+	}))
+	defer adapter.Close()
+	provider := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		providerRequests++
+		if request.URL.Path != "/client/v4/accounts/account-1/workers/assets/upload" || request.URL.RawQuery != "base64=true" {
+			t.Fatalf("provider target = %s", request.URL.String())
+		}
+		if request.Header.Get("Authorization") != "Bearer asset-session" {
+			t.Fatalf("provider auth = %q", request.Header.Get("Authorization"))
+		}
+		response.WriteHeader(http.StatusNoContent)
+	}))
+	defer provider.Close()
+	source := &fakeSource{resource: adapter.URL}
+	broker, err := NewBroker(adapter.URL, "rrcs_reference", []string{"workers-scripts.write"}, source, adapter.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer broker.Close()
+	base, err := broker.StartCloudflareAPIBase(provider.URL + "/client/v4")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sessionRequest, _ := http.NewRequest(http.MethodPost, base+"/client/v4/accounts/account-1/workers/scripts/wallet/assets-upload-session", nil)
+	sessionRequest.Header.Set("Authorization", "Bearer "+broker.SessionToken())
+	sessionResponse, err := http.DefaultClient.Do(sessionRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessionResponse.Body.Close()
+
+	uploadRequest, _ := http.NewRequest(http.MethodPost, base+"/client/v4/accounts/account-1/workers/assets/upload?base64=true", strings.NewReader("asset"))
+	uploadRequest.Header.Set("Authorization", "Bearer asset-session")
+	uploadResponse, err := http.DefaultClient.Do(uploadRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	uploadResponse.Body.Close()
+	if uploadResponse.StatusCode != http.StatusNoContent || adapterRequests != 1 || providerRequests != 1 {
+		t.Fatalf("status = %d, adapter requests = %d, provider requests = %d", uploadResponse.StatusCode, adapterRequests, providerRequests)
+	}
+
+	wrongPath, _ := http.NewRequest(http.MethodGet, base+"/client/v4/accounts/account-1/workers/scripts", nil)
+	wrongPath.Header.Set("Authorization", "Bearer asset-session")
+	wrongResponse, err := http.DefaultClient.Do(wrongPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrongResponse.Body.Close()
+	if wrongResponse.StatusCode != http.StatusUnauthorized || adapterRequests != 1 || providerRequests != 1 {
+		t.Fatalf("wrong-path status = %d, adapter requests = %d, provider requests = %d", wrongResponse.StatusCode, adapterRequests, providerRequests)
 	}
 }
 
