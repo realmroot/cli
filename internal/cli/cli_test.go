@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +13,17 @@ import (
 	"github.com/realmroot/toolbox/internal/catalog"
 	restish "github.com/saltbo/restish/v2"
 )
+
+func TestConfigureRestishPathsUsesVersionedCache(t *testing.T) {
+	t.Setenv("RSH_CONFIG_DIR", "")
+	t.Setenv("RSH_CACHE_DIR", "")
+	if err := configureRestishPaths(); err != nil {
+		t.Fatal(err)
+	}
+	if got := os.Getenv("RSH_CACHE_DIR"); !strings.HasSuffix(got, filepath.Join("realmroot", "restish", "v2")) {
+		t.Fatalf("RSH_CACHE_DIR = %q", got)
+	}
+}
 
 func TestRootHelpExposesOnlyProductCommands(t *testing.T) {
 	var stdout, stderr bytes.Buffer
