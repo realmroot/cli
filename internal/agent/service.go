@@ -291,9 +291,21 @@ func (s *Service) AuthorizationContexts(resourceIndicator string) ([]Authorizati
 }
 
 func (s *Service) SelectAuthorizationContext(resourceIndicator string, details []map[string]any) (AuthorizationContext, error) {
-	sources, err := s.credentialSourcesForResource(resourceIndicator)
+	binding, context, err := s.BindingForAuthorizationContext(resourceIndicator, details)
 	if err != nil {
 		return AuthorizationContext{}, err
+	}
+	if err := s.storeActiveBinding(resourceIndicator, binding); err != nil {
+		return AuthorizationContext{}, err
+	}
+	context.Active = true
+	return context, nil
+}
+
+func (s *Service) BindingForAuthorizationContext(resourceIndicator string, details []map[string]any) (CredentialBinding, AuthorizationContext, error) {
+	sources, err := s.credentialSourcesForResource(resourceIndicator)
+	if err != nil {
+		return CredentialBinding{}, AuthorizationContext{}, err
 	}
 	for _, source := range sources {
 		if !sameAuthorizationDetails(source.source.AuthorizationDetails, details) {
@@ -301,18 +313,14 @@ func (s *Service) SelectAuthorizationContext(resourceIndicator string, details [
 		}
 		binding, ok := leastPrivilegeSourceBinding(source)
 		if !ok {
-			return AuthorizationContext{}, os.ErrNotExist
+			return CredentialBinding{}, AuthorizationContext{}, os.ErrNotExist
 		}
-		if err := s.storeActiveBinding(resourceIndicator, binding); err != nil {
-			return AuthorizationContext{}, err
-		}
-		return AuthorizationContext{
+		return binding, AuthorizationContext{
 			AuthorizationDetails: cloneAuthorizationDetails(source.source.AuthorizationDetails),
 			Scopes:               bindingForSource(source).Scopes,
-			Active:               true,
 		}, nil
 	}
-	return AuthorizationContext{}, os.ErrNotExist
+	return CredentialBinding{}, AuthorizationContext{}, os.ErrNotExist
 }
 
 func (s *Service) BindingForReferenceScopeAlternatives(resourceIndicator, reference string, alternatives [][]string) (CredentialBinding, error) {

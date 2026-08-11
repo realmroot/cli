@@ -25,7 +25,8 @@ type Runner struct {
 }
 
 type RunOptions struct {
-	Scopes []string
+	Scopes               []string
+	AuthorizationDetails []map[string]any
 }
 
 func NewRunner(service *agent.Service, client *http.Client, stdin io.Reader, stdout, stderr io.Writer) *Runner {
@@ -40,9 +41,14 @@ func (r *Runner) Run(ctx context.Context, server catalog.ResourceServer, integra
 	if err != nil {
 		return err
 	}
-	binding, err := r.service.ActiveBindingForResource(server.ResourceURL)
+	var binding agent.CredentialBinding
+	if len(options.AuthorizationDetails) > 0 {
+		binding, _, err = r.service.BindingForAuthorizationContext(server.ResourceURL, options.AuthorizationDetails)
+	} else {
+		binding, err = r.service.ActiveBindingForResource(server.ResourceURL)
+	}
 	if err != nil {
-		return fmt.Errorf("load active %s authority: %w; request access with `realmroot agent request`", server.CommandName, err)
+		return fmt.Errorf("load selected %s authority: %w; inspect contexts with `realmroot agent use %s` or request access with `realmroot agent request`", server.CommandName, err, server.CommandName)
 	}
 	if len(options.Scopes) > 0 {
 		binding, err = r.service.BindingForReferenceScopeAlternatives(server.ResourceURL, binding.Reference, [][]string{options.Scopes})

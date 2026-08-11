@@ -138,6 +138,31 @@ func TestAuthorizationContextsSelectsAnExistingContextWithoutExposingItsReferenc
 	}
 }
 
+func TestBindingForAuthorizationContextDoesNotChangeTheActiveContext(t *testing.T) {
+	service, resource := serviceWithCredentialSources(t, map[string]credentialSource{
+		testCredentialSourceReference:   sourceWithScopes(t, "workspace-1", []string{"files:read"}),
+		secondCredentialSourceReference: sourceWithScopes(t, "workspace-2", []string{"files:write"}),
+	})
+	writeActiveBindings(t, service, 2, map[string]any{
+		resource: map[string]any{"reference": testCredentialSourceReference, "scopes": []string{"files:read"}},
+	})
+
+	binding, _, err := service.BindingForAuthorizationContext(resource, []map[string]any{{"type": "workspace", "identifier": "workspace-2"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if binding.Reference != secondCredentialSourceReference {
+		t.Fatalf("binding = %#v", binding)
+	}
+	active, err := service.ActiveBindingForResource(resource)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if active.Reference != testCredentialSourceReference {
+		t.Fatalf("active binding changed = %#v", active)
+	}
+}
+
 func TestBindingForReferenceScopeAlternativesNeverSwitchesAuthorizationContext(t *testing.T) {
 	service, resource := serviceWithCredentialSources(t, map[string]credentialSource{
 		testCredentialSourceReference:   sourceWithScopes(t, "workspace-1", []string{"files:read"}),

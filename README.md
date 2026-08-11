@@ -75,8 +75,10 @@ request access. Native REST, Git Smart HTTP, and Wrangler requests can follow a
 standard insufficient-scope challenge by switching to an already approved
 least-privileged offer in that same context. Use repeatable `realmroot exec
 --scope` flags when an opaque native protocol such as GraphQL does not advertise
-the operation scopes. `exec` never switches authorization contexts or requests
-new authority automatically.
+the operation scopes. An `exec --authorization-detail` value overrides the
+context only for that child process; persistent selection remains the
+responsibility of `agent use`. `exec` never switches authorization contexts or
+requests new authority automatically.
 
 `platform` is reserved and always maps to the Resource Server whose published
 identifier is `realmroot`. Resource Server names also cannot collide with the

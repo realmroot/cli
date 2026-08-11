@@ -109,20 +109,14 @@ func (a *App) execCommand() *cobra.Command {
 			if len(args) == 0 {
 				return errors.New("native command is required after --")
 			}
-			if len(options.authorizationDetails) > 0 {
-				details, err := parseAuthorizationDetails(options.authorizationDetails)
-				if err != nil {
-					return err
-				}
-				if _, err := service.SelectAuthorizationContext(server.ResourceURL, details); err != nil {
-					if errors.Is(err, os.ErrNotExist) {
-						return fmt.Errorf("Resource Server %q has no approved authority for that authorization detail", server.CommandName)
-					}
-					return err
-				}
+			details, err := parseAuthorizationDetails(options.authorizationDetails)
+			if err != nil {
+				return err
 			}
 			runner := execution.NewRunner(service, httpClient, command.InOrStdin(), a.stdout, a.stderr)
-			return runner.Run(command.Context(), server, integrations, args, execution.RunOptions{Scopes: options.scopes})
+			return runner.Run(command.Context(), server, integrations, args, execution.RunOptions{
+				Scopes: options.scopes, AuthorizationDetails: details,
+			})
 		},
 	}
 	command.Flags().StringArray("scope", nil, "exact approved scope to use for the native command (repeatable)")
