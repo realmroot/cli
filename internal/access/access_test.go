@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -40,7 +41,7 @@ func TestRequestSkipsConnectionForNativeResource(t *testing.T) {
 	service := &Service{api: client}
 	_, err := service.Request(context.Background(), catalog.ResourceServer{
 		ID: "resource-1", ConnectionStatus: "not_required",
-	}, []string{"agents:read"}, nil, "Read Agent status")
+	}, []string{"agents:read"}, nil, "Read Agent status", RequestOptions{Wait: true})
 	if !errors.Is(err, errAccessRequested) {
 		t.Fatalf("Request() error = %v, want access request", err)
 	}
@@ -53,21 +54,55 @@ func (client *recordingClient) GetAgentAuthorizationRequestWithResponse(context.
 	panic("unexpected access request poll")
 }
 
-func TestRequestReconcilesEveryRequiredAccountConnection(t *testing.T) {
+func TestRequestUsesOneAccessRequestForEveryConnectionState(t *testing.T) {
 	for _, status := range []string{"not_connected", "connected"} {
 		t.Run(status, func(t *testing.T) {
 			client := &recordingClient{}
 			service := &Service{api: client}
 			_, err := service.Request(context.Background(), catalog.ResourceServer{
 				ID: "resource-1", ConnectionStatus: status,
-			}, []string{"contents:write"}, nil, "Update repository content")
-			if !errors.Is(err, errConnectionRequested) {
-				t.Fatalf("Request() error = %v, want connection request", err)
+			}, []string{"contents:write"}, nil, "Update repository content", RequestOptions{Wait: true})
+			if !errors.Is(err, errAccessRequested) {
+				t.Fatalf("Request() error = %v, want access request", err)
 			}
-			if client.connectionRequests != 1 || client.accessRequests != 0 {
+			if client.connectionRequests != 0 || client.accessRequests != 1 {
 				t.Fatalf("connection requests = %d, access requests = %d", client.connectionRequests, client.accessRequests)
 			}
 		})
+	}
+}
+
+type pendingClient struct{}
+
+func (*pendingClient) CreateAgentAuthorizationRequestWithResponse(context.Context, realmrootapi.CreateAgentAuthorizationRequestJSONRequestBody, ...realmrootapi.RequestEditorFn) (*realmrootapi.CreateAgentAuthorizationRequestResponse, error) {
+	response := &realmrootapi.CreateAgentAuthorizationRequestResponse{HTTPResponse: &http.Response{StatusCode: http.StatusCreated}}
+	body := []byte(`{
+		"id":"request-1","agentId":"agent-1","resourceServerId":"resource-1","scopes":["issues:read"],
+		"authorizationDetails":[],"reason":null,"status":"pending","createdAt":"2026-08-12T00:00:00Z",
+		"updatedAt":"2026-08-12T00:00:00Z","expiresAt":"2026-08-12T00:10:00Z","decidedAt":null,
+		"interaction":{"type":"user-approval","status":"pending","url":"https://id.realmroot.dev/agent/resource-access/approve#token=secret","expiresAt":"2026-08-12T00:10:00Z"},
+		"credentialOffer":{"type":"dpop","resourceIndicator":"","authorizationDetails":[],"endpoint":"","proof":{"method":"jkt","algorithm":"ES256","uri":""}}
+	}`)
+	if err := json.Unmarshal(body, &response.JSON201); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+func (*pendingClient) GetAgentAuthorizationRequestWithResponse(context.Context, string, ...realmrootapi.RequestEditorFn) (*realmrootapi.GetAgentAuthorizationRequestResponse, error) {
+	panic("no-wait request must not poll")
+}
+
+func TestRequestNoWaitReturnsApprovalLinkWithoutOpeningOrPolling(t *testing.T) {
+	service := &Service{api: &pendingClient{}}
+	receipt, err := service.Request(context.Background(), catalog.ResourceServer{
+		ID: "resource-1", CommandName: "github", ConnectionStatus: "not_connected",
+	}, []string{"issues:read"}, nil, "Read issues", RequestOptions{Wait: false})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if receipt.Status != "pending" || receipt.ApprovalURL == "" || receipt.ResourceIndicator != "" {
+		t.Fatalf("receipt = %#v", receipt)
 	}
 }
 

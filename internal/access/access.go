@@ -17,8 +17,13 @@ import (
 type Receipt struct {
 	Status            string   `json:"status"`
 	ResourceServer    string   `json:"resourceServer"`
-	ResourceIndicator string   `json:"resourceIndicator"`
+	ResourceIndicator string   `json:"resourceIndicator,omitempty"`
 	Scopes            []string `json:"scopes"`
+	ApprovalURL       string   `json:"approvalUrl,omitempty"`
+}
+
+type RequestOptions struct {
+	Wait bool
 }
 
 type Service struct {
@@ -29,8 +34,6 @@ type Service struct {
 type realmrootClient interface {
 	CreateAgentAuthorizationRequestWithResponse(context.Context, realmrootapi.CreateAgentAuthorizationRequestJSONRequestBody, ...realmrootapi.RequestEditorFn) (*realmrootapi.CreateAgentAuthorizationRequestResponse, error)
 	GetAgentAuthorizationRequestWithResponse(context.Context, string, ...realmrootapi.RequestEditorFn) (*realmrootapi.GetAgentAuthorizationRequestResponse, error)
-	CreateConnectionRequestWithResponse(context.Context, string, realmrootapi.CreateConnectionRequestJSONRequestBody, ...realmrootapi.RequestEditorFn) (*realmrootapi.CreateConnectionRequestResponse, error)
-	GetConnectionRequestWithResponse(context.Context, string, string, ...realmrootapi.RequestEditorFn) (*realmrootapi.GetConnectionRequestResponse, error)
 }
 
 func New(agentService *agent.Service, httpClient realmrootapi.HttpRequestDoer) (*Service, error) {
@@ -44,7 +47,7 @@ func New(agentService *agent.Service, httpClient realmrootapi.HttpRequestDoer) (
 	return &Service{agent: agentService, api: api}, nil
 }
 
-func (s *Service) Request(ctx context.Context, server catalog.ResourceServer, scopes []string, authorizationDetails []map[string]any, reason string) (Receipt, error) {
+func (s *Service) Request(ctx context.Context, server catalog.ResourceServer, scopes []string, authorizationDetails []map[string]any, reason string, options RequestOptions) (Receipt, error) {
 	scopes = normalizedScopes(scopes)
 	if len(scopes) == 0 {
 		return Receipt{}, errors.New("at least one exact Resource Server scope is required")
@@ -52,12 +55,6 @@ func (s *Service) Request(ctx context.Context, server catalog.ResourceServer, sc
 	if reason = strings.TrimSpace(reason); reason == "" {
 		reason = "Perform the requested operation on the selected Resource Server"
 	}
-	if server.ConnectionStatus != "not_required" {
-		if err := s.connect(ctx, server, scopes, authorizationDetails, reason); err != nil {
-			return Receipt{}, err
-		}
-	}
-
 	details, err := accessDetails(authorizationDetails)
 	if err != nil {
 		return Receipt{}, err
@@ -80,6 +77,9 @@ func (s *Service) Request(ctx context.Context, server catalog.ResourceServer, sc
 	approvalURL := response.JSON201.Interaction.Url
 	expiresAt := response.JSON201.Interaction.ExpiresAt
 	if status == "pending" && approvalURL != "" {
+		if !options.Wait {
+			return Receipt{Status: "pending", ResourceServer: server.CommandName, Scopes: scopes, ApprovalURL: approvalURL}, nil
+		}
 		if err := s.agent.OpenApproval(approvalURL); err != nil {
 			return Receipt{}, err
 		}
@@ -138,47 +138,6 @@ func (s *Service) Request(ctx context.Context, server catalog.ResourceServer, sc
 	return receipt(server, offer.ResourceIndicator, current.Scopes), nil
 }
 
-func (s *Service) connect(ctx context.Context, server catalog.ResourceServer, scopes []string, authorizationDetails []map[string]any, reason string) error {
-	details, err := connectionDetails(authorizationDetails)
-	if err != nil {
-		return err
-	}
-	body := realmrootapi.CreateConnectionRequestJSONRequestBody{Scopes: scopes, Reason: &reason}
-	if len(details) > 0 {
-		body.AuthorizationDetails = &details
-	}
-	response, err := s.api.CreateConnectionRequestWithResponse(ctx, server.ID, body, s.editor("connection-requests:read", "connection-requests:write"))
-	if err != nil {
-		return fmt.Errorf("create connection request: %w", err)
-	}
-	if response.JSON201 == nil {
-		return apiError("create connection request", response.StatusCode(), response.Body)
-	}
-	status := string(response.JSON201.Interaction.Status)
-	if status == "pending" && response.JSON201.Interaction.Url != "" {
-		if err := s.agent.OpenApproval(response.JSON201.Interaction.Url); err != nil {
-			return err
-		}
-	}
-	for status == "pending" {
-		if err := wait(ctx, 2*time.Second); err != nil {
-			return err
-		}
-		polled, err := s.api.GetConnectionRequestWithResponse(ctx, server.ID, response.JSON201.Id, s.editor("connection-requests:read"))
-		if err != nil {
-			return fmt.Errorf("poll connection request: %w", err)
-		}
-		if polled.JSON200 == nil {
-			return apiError("poll connection request", polled.StatusCode(), polled.Body)
-		}
-		status = string(polled.JSON200.Interaction.Status)
-	}
-	if status != "completed" {
-		return fmt.Errorf("controller connection interaction %s", status)
-	}
-	return nil
-}
-
 func (s *Service) editor(scopes ...string) realmrootapi.RequestEditorFn {
 	return func(ctx context.Context, request *http.Request) error {
 		return s.agent.Authenticate(ctx, request, scopes)
@@ -193,18 +152,6 @@ func accessDetails(values []map[string]any) ([]realmrootapi.CreateAgentAuthoriza
 			return nil, err
 		}
 		result = append(result, realmrootapi.CreateAgentAuthorizationRequestJSONBody_AuthorizationDetails_Item{Type: typeName, AdditionalProperties: properties})
-	}
-	return result, nil
-}
-
-func connectionDetails(values []map[string]any) ([]realmrootapi.CreateConnectionRequestJSONBody_AuthorizationDetails_Item, error) {
-	result := make([]realmrootapi.CreateConnectionRequestJSONBody_AuthorizationDetails_Item, 0, len(values))
-	for _, value := range values {
-		typeName, properties, err := detail(value)
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, realmrootapi.CreateConnectionRequestJSONBody_AuthorizationDetails_Item{Type: typeName, AdditionalProperties: properties})
 	}
 	return result, nil
 }

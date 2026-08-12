@@ -46,12 +46,20 @@ Feature: Realmroot Toolbox command line
 
   @journey:task-scoped-access @entrypoint:agent-request
   Scenario: Request exact Resource access
-    Given the Agent selected a Context and scopes from Resource Server discovery
-    When it runs "realmroot agent request" with the Resource Server, Context, and scopes
-    Then any required account connection is established or expanded for the requested authority
-    And any required controller interaction is opened and polled
+    Given the Agent selected scopes from Resource Server discovery
+    When it runs "realmroot agent request" with the Resource Server and scopes
+    Then any required account connection, Context selection, and Permission decision use one controller interaction
+    And the controller interaction is opened and polled by default
     And the resulting credential offer is stored without a target private key or access token
     And the command returns only the ready authority without exposing the internal credential binding
+
+  @journey:task-scoped-access-handoff @entrypoint:agent-request
+  Scenario: Hand an approval link to a remote controller
+    Given the controller is not using the Agent's computer
+    When the Agent runs "realmroot agent request --no-wait" with the Resource Server and scopes
+    Then Toolbox does not open a browser or poll the request
+    And it immediately returns the pending status and approval URL
+    And the same URL continues through account connection, Context selection, and Permission approval
 
   @journey:direct-resource-operation @entrypoint:toolbox-operation
   Scenario: Invoke an OpenAPI-generated Resource operation

@@ -2407,8 +2407,10 @@ type CreateAgentEnrollmentParams struct {
 // CreateAgentEnrollmentJSONBody0 defines parameters for CreateAgentEnrollment.
 type CreateAgentEnrollmentJSONBody0 struct {
 	Kind           CreateAgentEnrollmentJSONBody0Kind `json:"kind"`
-	Name           string                             `json:"name"`
+	Nickname       *string                            `json:"nickname,omitempty"`
 	OrganizationId *string                            `json:"organizationId,omitempty"`
+	Runtime        string                             `json:"runtime"`
+	Username       string                             `json:"username"`
 }
 
 // CreateAgentEnrollmentJSONBody0Kind defines parameters for CreateAgentEnrollment.
@@ -2432,9 +2434,11 @@ type CreateAgentEnrollment201JSONResponseBody0 struct {
 	HomeSpace CreateAgentEnrollment201JSONResponseBody_0_HomeSpace `json:"homeSpace"`
 	Id        string                                               `json:"id"`
 	Kind      CreateAgentEnrollment201JSONResponseBody0Kind        `json:"kind"`
-	Name      string                                               `json:"name"`
+	Nickname  string                                               `json:"nickname"`
+	Runtime   string                                               `json:"runtime"`
 	Status    CreateAgentEnrollment201JSONResponseBody0Status      `json:"status"`
 	UpdatedAt time.Time                                            `json:"updatedAt"`
+	Username  string                                               `json:"username"`
 }
 
 // CreateAgentEnrollment201JSONResponseBody0HomeSpace0 defines parameters for CreateAgentEnrollment.
@@ -2476,9 +2480,11 @@ type CreateAgentEnrollment201JSONResponseBody1 struct {
 		HomeSpace CreateAgentEnrollment201JSONResponseBody_1_Enrollment_HomeSpace `json:"homeSpace"`
 		Id        string                                                          `json:"id"`
 		Kind      CreateAgentEnrollment201JSONResponseBody1EnrollmentKind         `json:"kind"`
-		Name      string                                                          `json:"name"`
+		Nickname  string                                                          `json:"nickname"`
+		Runtime   string                                                          `json:"runtime"`
 		Status    CreateAgentEnrollment201JSONResponseBody1EnrollmentStatus       `json:"status"`
 		UpdatedAt time.Time                                                       `json:"updatedAt"`
+		Username  string                                                          `json:"username"`
 	} `json:"enrollment"`
 	VerificationUri string `json:"verificationUri"`
 }
@@ -4863,9 +4869,11 @@ type GetAgentStatusResponse struct {
 			Id        string                                            `json:"id"`
 			Issuer    string                                            `json:"issuer"`
 			Name      string                                            `json:"name"`
+			Runtime   string                                            `json:"runtime"`
 			Status    GetAgentStatus200JSONResponseBodyAgentStatus      `json:"status"`
 			Subject   string                                            `json:"subject"`
 			UpdatedAt time.Time                                         `json:"updatedAt"`
+			Username  string                                            `json:"username"`
 		} `json:"agent"`
 		Enrollment struct {
 			Pending string                                           `json:"pending"`
@@ -5204,9 +5212,11 @@ type GetAgentEnrollmentResponse struct {
 		HomeSpace GetAgentEnrollment200JSONResponseBody_HomeSpace `json:"homeSpace"`
 		Id        string                                          `json:"id"`
 		Kind      GetAgentEnrollment200JSONResponseBodyKind       `json:"kind"`
-		Name      string                                          `json:"name"`
+		Nickname  string                                          `json:"nickname"`
+		Runtime   string                                          `json:"runtime"`
 		Status    GetAgentEnrollment200JSONResponseBodyStatus     `json:"status"`
 		UpdatedAt time.Time                                       `json:"updatedAt"`
+		Username  string                                          `json:"username"`
 	}
 	JSON401 *struct {
 		Error struct {
@@ -5312,10 +5322,11 @@ type ListResourceServersResponse struct {
 			ResourceUrl         string `json:"resourceUrl"`
 			ScopeRegistry       struct {
 				AccountConnection *struct {
-					AuthorizationEndpoint string                                                                        `json:"authorizationEndpoint"`
-					Mode                  ListResourceServers200JSONResponseBodyItemsScopeRegistryAccountConnectionMode `json:"mode"`
-					RevocationEndpoint    *string                                                                       `json:"revocationEndpoint,omitempty"`
-					TokenEndpoint         string                                                                        `json:"tokenEndpoint"`
+					AuthorizationDetailsEndpoint *string                                                                       `json:"authorizationDetailsEndpoint,omitempty"`
+					AuthorizationEndpoint        string                                                                        `json:"authorizationEndpoint"`
+					Mode                         ListResourceServers200JSONResponseBodyItemsScopeRegistryAccountConnectionMode `json:"mode"`
+					RevocationEndpoint           *string                                                                       `json:"revocationEndpoint,omitempty"`
+					TokenEndpoint                string                                                                        `json:"tokenEndpoint"`
 				} `json:"accountConnection,omitempty"`
 				Discovery struct {
 					DocumentHash string `json:"documentHash"`
@@ -5443,10 +5454,11 @@ type GetResourceServerResponse struct {
 		ResourceUrl         string `json:"resourceUrl"`
 		ScopeRegistry       struct {
 			AccountConnection *struct {
-				AuthorizationEndpoint string                                                                 `json:"authorizationEndpoint"`
-				Mode                  GetResourceServer200JSONResponseBodyScopeRegistryAccountConnectionMode `json:"mode"`
-				RevocationEndpoint    *string                                                                `json:"revocationEndpoint,omitempty"`
-				TokenEndpoint         string                                                                 `json:"tokenEndpoint"`
+				AuthorizationDetailsEndpoint *string                                                                `json:"authorizationDetailsEndpoint,omitempty"`
+				AuthorizationEndpoint        string                                                                 `json:"authorizationEndpoint"`
+				Mode                         GetResourceServer200JSONResponseBodyScopeRegistryAccountConnectionMode `json:"mode"`
+				RevocationEndpoint           *string                                                                `json:"revocationEndpoint,omitempty"`
+				TokenEndpoint                string                                                                 `json:"tokenEndpoint"`
 			} `json:"accountConnection,omitempty"`
 			Discovery struct {
 				DocumentHash string `json:"documentHash"`
@@ -5859,9 +5871,11 @@ func ParseGetAgentStatusResponse(rsp *http.Response) (*GetAgentStatusResponse, e
 				Id        string                                            `json:"id"`
 				Issuer    string                                            `json:"issuer"`
 				Name      string                                            `json:"name"`
+				Runtime   string                                            `json:"runtime"`
 				Status    GetAgentStatus200JSONResponseBodyAgentStatus      `json:"status"`
 				Subject   string                                            `json:"subject"`
 				UpdatedAt time.Time                                         `json:"updatedAt"`
+				Username  string                                            `json:"username"`
 			} `json:"agent"`
 			Enrollment struct {
 				Pending string                                           `json:"pending"`
@@ -6258,9 +6272,11 @@ func ParseGetAgentEnrollmentResponse(rsp *http.Response) (*GetAgentEnrollmentRes
 			HomeSpace GetAgentEnrollment200JSONResponseBody_HomeSpace `json:"homeSpace"`
 			Id        string                                          `json:"id"`
 			Kind      GetAgentEnrollment200JSONResponseBodyKind       `json:"kind"`
-			Name      string                                          `json:"name"`
+			Nickname  string                                          `json:"nickname"`
+			Runtime   string                                          `json:"runtime"`
 			Status    GetAgentEnrollment200JSONResponseBodyStatus     `json:"status"`
 			UpdatedAt time.Time                                       `json:"updatedAt"`
+			Username  string                                          `json:"username"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -6380,10 +6396,11 @@ func ParseListResourceServersResponse(rsp *http.Response) (*ListResourceServersR
 				ResourceUrl         string `json:"resourceUrl"`
 				ScopeRegistry       struct {
 					AccountConnection *struct {
-						AuthorizationEndpoint string                                                                        `json:"authorizationEndpoint"`
-						Mode                  ListResourceServers200JSONResponseBodyItemsScopeRegistryAccountConnectionMode `json:"mode"`
-						RevocationEndpoint    *string                                                                       `json:"revocationEndpoint,omitempty"`
-						TokenEndpoint         string                                                                        `json:"tokenEndpoint"`
+						AuthorizationDetailsEndpoint *string                                                                       `json:"authorizationDetailsEndpoint,omitempty"`
+						AuthorizationEndpoint        string                                                                        `json:"authorizationEndpoint"`
+						Mode                         ListResourceServers200JSONResponseBodyItemsScopeRegistryAccountConnectionMode `json:"mode"`
+						RevocationEndpoint           *string                                                                       `json:"revocationEndpoint,omitempty"`
+						TokenEndpoint                string                                                                        `json:"tokenEndpoint"`
 					} `json:"accountConnection,omitempty"`
 					Discovery struct {
 						DocumentHash string `json:"documentHash"`
@@ -6519,10 +6536,11 @@ func ParseGetResourceServerResponse(rsp *http.Response) (*GetResourceServerRespo
 			ResourceUrl         string `json:"resourceUrl"`
 			ScopeRegistry       struct {
 				AccountConnection *struct {
-					AuthorizationEndpoint string                                                                 `json:"authorizationEndpoint"`
-					Mode                  GetResourceServer200JSONResponseBodyScopeRegistryAccountConnectionMode `json:"mode"`
-					RevocationEndpoint    *string                                                                `json:"revocationEndpoint,omitempty"`
-					TokenEndpoint         string                                                                 `json:"tokenEndpoint"`
+					AuthorizationDetailsEndpoint *string                                                                `json:"authorizationDetailsEndpoint,omitempty"`
+					AuthorizationEndpoint        string                                                                 `json:"authorizationEndpoint"`
+					Mode                         GetResourceServer200JSONResponseBodyScopeRegistryAccountConnectionMode `json:"mode"`
+					RevocationEndpoint           *string                                                                `json:"revocationEndpoint,omitempty"`
+					TokenEndpoint                string                                                                 `json:"tokenEndpoint"`
 				} `json:"accountConnection,omitempty"`
 				Discovery struct {
 					DocumentHash string `json:"documentHash"`
