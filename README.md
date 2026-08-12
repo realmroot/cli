@@ -17,7 +17,7 @@ make install
 ## Commands
 
 ```console
-realmroot agent enroll --username mira.chen --nickname "Mira Chen"
+realmroot agent enroll --username mira --nickname "Mira Chen"
 realmroot agent whoami
 realmroot version
 realmroot toolbox
@@ -45,7 +45,8 @@ realmroot exec cloudflare -- wrangler deployments list --name realmroot-adapters
 Enrollment always requires the immutable Agent username. Add `--nickname` to
 choose a display nickname; otherwise Toolbox uses the detected runtime as the
 nickname. Realmroot stores the runtime separately and never derives the
-username from either field.
+username from either field. Start with a short lowercase human handle such as
+`mira`; only choose another available handle when enrollment reports a conflict.
 
 Release builds can embed traceable build information:
 

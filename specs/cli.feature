@@ -10,7 +10,7 @@ Feature: Realmroot Toolbox command line
   @journey:agent-enrollment @entrypoint:agent-enroll
   Scenario: Enroll a stable Agent identity
     Given the Agent is not enrolled with the selected Realmroot deployment
-    When it runs "realmroot agent enroll --username mira.chen --nickname 'Mira Chen'"
+    When it runs "realmroot agent enroll --username mira --nickname 'Mira Chen'"
     Then the controller can approve enrollment in a browser
     And the immutable username is preserved without being derived from the nickname or runtime
     And an omitted nickname defaults to the detected runtime
