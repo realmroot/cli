@@ -17,7 +17,7 @@ make install
 ## Commands
 
 ```console
-realmroot agent enroll
+realmroot agent enroll --username mira.chen --nickname "Mira Chen"
 realmroot agent whoami
 realmroot version
 realmroot toolbox
@@ -42,6 +42,11 @@ realmroot exec github --context realmroot -- gh pr merge 42 --repo realmroot/rea
 realmroot exec cloudflare -- wrangler deployments list --name realmroot-adapters
 ```
 
+Enrollment always requires the immutable Agent username. Add `--nickname` to
+choose a display nickname; otherwise Toolbox uses the detected runtime as the
+nickname. Realmroot stores the runtime separately and never derives the
+username from either field.
+
 Release builds can embed traceable build information:
 
 ```console
@@ -61,9 +66,9 @@ exec <resource-server>` to inspect one Resource Server. The same native command
 inventory is included in `realmroot toolbox <resource-server>` output.
 
 GitHub execution supports REST, GraphQL, and Git Smart HTTP. Git commits made
-through `realmroot exec github -- git ...` use the stable Agent name and
-`<subject>@agents.realmroot.dev` email without changing repository or global
-Git configuration. Cloudflare execution redirects Wrangler's API base to the
+through `realmroot exec github -- git ...` use the Agent's immutable username as
+the author name and `<username>@agents.realmroot.dev` as the email without
+changing repository or global Git configuration. Cloudflare execution redirects Wrangler's API base to the
 Cloudflare Resource Server and retains its native subcommands. When Cloudflare
 returns a short-lived asset-upload credential, the broker keeps it in memory
 and accepts it only for that account's asset-upload path during the same exec

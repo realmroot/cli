@@ -99,6 +99,28 @@ func TestToolboxHelpDoesNotCallRealmroot(t *testing.T) {
 	}
 }
 
+func TestAgentEnrollRequiresExplicitUsernameAndDocumentsOptionalNickname(t *testing.T) {
+	// [spec: cli/agent-enrollment]
+	var stdout, stderr bytes.Buffer
+	command := New(&stdout, &stderr)
+	command.SetArgs([]string{"agent", "enroll"})
+	if err := command.Execute(); err == nil || !strings.Contains(err.Error(), "--username is required") {
+		t.Fatalf("enroll error = %v", err)
+	}
+
+	stdout.Reset()
+	command = New(&stdout, &stderr)
+	command.SetArgs([]string{"agent", "enroll", "--help"})
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{"--username", "--nickname", "defaults to the detected runtime"} {
+		if !strings.Contains(stdout.String(), expected) {
+			t.Fatalf("enroll help omitted %q:\n%s", expected, stdout.String())
+		}
+	}
+}
+
 func TestExecHelpExplainsDiscoveryAndExecution(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	command := New(&stdout, &stderr)

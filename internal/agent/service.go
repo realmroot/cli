@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -17,10 +18,15 @@ import (
 
 const DefaultOrigin = "https://id.realmroot.dev"
 
+var agentUsernamePattern = regexp.MustCompile(`^[a-z0-9_.-]{3,64}$`)
+
 type Identity struct {
-	ID      string `json:"id"`
-	Issuer  string `json:"issuer"`
-	Subject string `json:"subject"`
+	ID       string `json:"id"`
+	Issuer   string `json:"issuer"`
+	Subject  string `json:"subject"`
+	Username string `json:"username"`
+	Nickname string `json:"nickname"`
+	Runtime  string `json:"runtime"`
 }
 
 type ExecutionIdentity struct {
@@ -84,16 +90,27 @@ func (s *Service) HTTPClient() *http.Client { return s.client }
 
 func (s *Service) OpenApproval(rawURL string) error { return s.opener.Open(rawURL) }
 
-func (s *Service) Enroll(ctx context.Context) (Identity, error) {
+func (s *Service) Enroll(ctx context.Context, username, nickname string) (Identity, error) {
+	username = strings.ToLower(strings.TrimSpace(username))
+	if !agentUsernamePattern.MatchString(username) {
+		return Identity{}, errors.New("Agent username must contain 3 to 64 letters, numbers, underscores, periods, or hyphens")
+	}
 	configuration, target, err := s.configurationAndTarget(ctx)
 	if err != nil {
 		return Identity{}, err
 	}
-	state, err := ensureApprovedAgentRegistration(ctx, s.states, s.client, systemPromptWriter{}, target, configuration)
+	nickname = strings.TrimSpace(nickname)
+	if nickname == "" {
+		nickname = target.Runtime
+	}
+	state, err := ensureApprovedAgentRegistration(ctx, s.states, s.client, systemPromptWriter{}, target, configuration, nickname)
 	if err != nil {
 		return Identity{}, fmt.Errorf("enroll Agent: %w", err)
 	}
-	if state.Identity == nil {
+	if state.Identity != nil && state.Identity.Username != "" && state.Identity.Username != username {
+		return Identity{}, errors.New("Agent username is immutable")
+	}
+	if state.Identity == nil || state.Identity.Username == "" {
 		assertion, err := signAgentJWT(state, configuration.Issuer, time.Now())
 		if err != nil {
 			return Identity{}, err
@@ -102,7 +119,9 @@ func (s *Service) Enroll(ctx context.Context) (Identity, error) {
 		if err := requestJSONHeaders(ctx, s.client, http.MethodPost, configuration.AgentEnrollmentEndpoint, map[string]string{
 			"Authorization":   "Bearer " + assertion,
 			"Idempotency-Key": state.EnrollmentIdempotencyKey,
-		}, map[string]any{"kind": "new_identity", "name": state.Name}, &enrollment); err != nil {
+		}, map[string]any{
+			"kind": "new_identity", "username": username, "nickname": nickname, "runtime": state.Runtime,
+		}, &enrollment); err != nil {
 			return Identity{}, fmt.Errorf("create Agent enrollment: %w", err)
 		}
 		if enrollment.Kind != "new_identity" || enrollment.Status != "approved" {
@@ -129,7 +148,10 @@ func (s *Service) WhoAmI(ctx context.Context) (Identity, error) {
 		return Identity{}, err
 	}
 	if state.Identity == nil {
-		return Identity{}, errors.New("Realmroot Agent enrollment is incomplete; run `realmroot agent enroll`")
+		return Identity{}, errors.New("Realmroot Agent enrollment is incomplete; run `realmroot agent enroll --username <username>`")
+	}
+	if state.Identity.Username == "" {
+		return Identity{}, errors.New("Agent username is not assigned; run `realmroot agent enroll --username <username>`")
 	}
 	return publicIdentity(state.Identity), nil
 }
@@ -144,17 +166,19 @@ func (s *Service) ExecutionIdentity(ctx context.Context) (ExecutionIdentity, err
 		return ExecutionIdentity{}, err
 	}
 	if state.Identity == nil {
-		return ExecutionIdentity{}, errors.New("Realmroot Agent enrollment is incomplete; run `realmroot agent enroll`")
+		return ExecutionIdentity{}, errors.New("Realmroot Agent enrollment is incomplete; run `realmroot agent enroll --username <username>`")
 	}
-	name := strings.TrimSpace(state.Name)
-	if name == "" {
-		name = "Realmroot Agent"
+	if state.Identity.Username == "" {
+		return ExecutionIdentity{}, errors.New("Agent username is not assigned; run `realmroot agent enroll --username <username>`")
 	}
-	return ExecutionIdentity{Name: name, Email: state.Identity.Subject + "@agents.realmroot.dev"}, nil
+	return ExecutionIdentity{Name: state.Identity.Username, Email: state.Identity.Username + "@agents.realmroot.dev"}, nil
 }
 
 func publicIdentity(identity *stableIdentity) Identity {
-	return Identity{ID: identity.ID, Issuer: identity.Issuer, Subject: identity.Subject}
+	return Identity{
+		ID: identity.ID, Issuer: identity.Issuer, Subject: identity.Subject, Username: identity.Username,
+		Nickname: identity.Nickname, Runtime: identity.Runtime,
+	}
 }
 
 func (s *Service) RequestEditor(scopes ...string) restishRequestEditor {

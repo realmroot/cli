@@ -32,9 +32,12 @@ type agentTarget struct {
 }
 
 type stableIdentity struct {
-	ID      string `json:"id"`
-	Issuer  string `json:"issuer"`
-	Subject string `json:"subject"`
+	ID       string `json:"id"`
+	Issuer   string `json:"issuer"`
+	Subject  string `json:"subject"`
+	Username string `json:"username,omitempty"`
+	Nickname string `json:"name,omitempty"`
+	Runtime  string `json:"runtime,omitempty"`
 }
 
 type pendingApproval struct {

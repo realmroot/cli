@@ -10,8 +10,10 @@ Feature: Realmroot Toolbox command line
   @journey:agent-enrollment @entrypoint:agent-enroll
   Scenario: Enroll a stable Agent identity
     Given the Agent is not enrolled with the selected Realmroot deployment
-    When it runs "realmroot agent enroll"
+    When it runs "realmroot agent enroll --username mira.chen --nickname 'Mira Chen'"
     Then the controller can approve enrollment in a browser
+    And the immutable username is preserved without being derived from the nickname or runtime
+    And an omitted nickname defaults to the detected runtime
     And the command returns the stable Agent issuer and subject
 
   @journey:resource-server-discovery @entrypoint:toolbox
@@ -76,7 +78,7 @@ Feature: Realmroot Toolbox command line
     And the Agent has approved GitHub repository authority
     When it runs Git or GitHub CLI through "realmroot exec github"
     Then GitHub API, GraphQL, clone, fetch, pull, and push traffic is routed through the GitHub Resource Server
-    And local commits use the stable Agent name and email without changing global Git configuration
+    And local commits derive stable name and email from the immutable Agent username without changing global Git configuration
 
   @journey:cloudflare-native-tool @entrypoint:exec
   Scenario: Use Wrangler as the stable Agent

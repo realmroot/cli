@@ -108,7 +108,7 @@ func authenticateRequest(
 		return plugin.AuthHookOutput{}, err
 	}
 	if state.Identity == nil {
-		return plugin.AuthHookOutput{}, errors.New("Realmroot Agent enrollment is incomplete; rerun `realmroot agent enroll`")
+		return plugin.AuthHookOutput{}, errors.New("Realmroot Agent enrollment is incomplete; rerun `realmroot agent enroll --username <username>`")
 	}
 	state, credential, err := ensureProtocolCredential(
 		context.Background(), states, client, target, state, configuration, requiredScopes,
@@ -177,7 +177,7 @@ func authenticateEnrollmentRequest(
 	}
 	var state agentState
 	if input.Request.Method == http.MethodPost && input.Request.URI == configuration.AgentEnrollmentEndpoint {
-		state, err = ensureApprovedAgentRegistration(context.Background(), states, client, prompt, target, configuration)
+		state, err = ensureApprovedAgentRegistration(context.Background(), states, client, prompt, target, configuration, "")
 	} else {
 		state, err = loadAgentRegistration(states, target)
 	}
@@ -221,13 +221,17 @@ func ensureApprovedAgentRegistration(
 	prompt approvalPrompt,
 	target agentTarget,
 	configuration agentConfiguration,
+	nickname string,
 ) (agentState, error) {
+	if strings.TrimSpace(nickname) == "" {
+		nickname = target.Runtime
+	}
 	state, err := states.Load(target)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			return agentState{}, err
 		}
-		state, err = registerAgent(ctx, states, client, target, agentDisplayName(target.Runtime), false, configuration)
+		state, err = registerAgent(ctx, states, client, target, nickname, false, configuration)
 		if err != nil {
 			return agentState{}, err
 		}
@@ -260,7 +264,7 @@ func ensureApprovedAgentRegistration(
 func loadAgentRegistration(states stateStore, target agentTarget) (agentState, error) {
 	state, err := states.Load(target)
 	if errors.Is(err, os.ErrNotExist) {
-		return agentState{}, errors.New("Realmroot Agent is not enrolled; run `realmroot agent enroll`")
+		return agentState{}, errors.New("Realmroot Agent is not enrolled; run `realmroot agent enroll --username <username>`")
 	}
 	if err != nil {
 		return agentState{}, err
@@ -276,7 +280,7 @@ func completeAgentEnrollment(
 	state agentState,
 	configuration agentConfiguration,
 ) error {
-	if state.Identity != nil {
+	if state.Identity != nil && state.Identity.Username != "" {
 		return nil
 	}
 	state, credential, err := ensureProtocolCredential(
@@ -298,9 +302,9 @@ func completeAgentEnrollment(
 	}, nil, &status); err != nil {
 		return err
 	}
-	if status.Agent == nil || status.Agent.ID == "" ||
-		status.Agent.Issuer != configuration.AgentIdentityIssuer || status.Agent.Subject == "" {
-		return errors.New("Agent identity response is missing issuer or subject")
+	if status.Agent == nil || status.Agent.ID == "" || status.Agent.Issuer != configuration.AgentIdentityIssuer ||
+		status.Agent.Subject == "" || status.Agent.Username == "" {
+		return errors.New("Agent identity response is missing issuer, subject, or username")
 	}
 	state.Identity = status.Agent
 	state.RegistrationApproval = nil

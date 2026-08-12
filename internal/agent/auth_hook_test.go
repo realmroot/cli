@@ -54,7 +54,7 @@ func TestEnrollmentAuthRegistersAgentThenWhoamiUsesTheEnrolledIdentity(t *testin
 			if err := json.NewDecoder(request.Body).Decode(&registration); err != nil {
 				t.Fatal(err)
 			}
-			if registration.Name != "Build Agent" || registration.HostName != expectedHostName {
+			if registration.Name != "codex" || registration.HostName != expectedHostName {
 				t.Fatalf("registration names = %#v", registration)
 			}
 			return jsonResponse(http.StatusOK, map[string]any{
@@ -88,6 +88,7 @@ func TestEnrollmentAuthRegistersAgentThenWhoamiUsesTheEnrolledIdentity(t *testin
 			}
 			return jsonResponse(http.StatusCreated, map[string]any{"agent": map[string]any{
 				"id": "agent-identity-1", "issuer": "https://auth.example.com/api/auth", "subject": "agt_123",
+				"username": "build-agent.00000000000000000000000000000004",
 			}}), nil
 		default:
 			t.Fatalf("unexpected request: %s %s", request.Method, request.URL)
@@ -123,7 +124,8 @@ func TestEnrollmentAuthRegistersAgentThenWhoamiUsesTheEnrolledIdentity(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if states.state.Identity == nil || states.state.Identity.Subject != "agt_123" {
+	if states.state.Identity == nil || states.state.Identity.Subject != "agt_123" ||
+		states.state.Identity.Username != "build-agent.00000000000000000000000000000004" {
 		t.Fatalf("enrollment response did not persist identity: %#v", states.state.Identity)
 	}
 
@@ -258,7 +260,10 @@ func newCredentialState(t *testing.T, credential dpopCredential) *memoryStateSto
 		Runtime: defaultAgentRuntime, AgentID: "agent-123", HostID: "host-123", AgentKeyID: "agent-key",
 		AgentPrivateKey:          encodePrivateKey(agentPrivate),
 		EnrollmentIdempotencyKey: "enroll_test",
-		Identity:                 &stableIdentity{ID: "identity-1", Issuer: "https://auth.example.com/api/auth", Subject: "agt_123"},
+		Identity: &stableIdentity{
+			ID: "identity-1", Issuer: "https://auth.example.com/api/auth", Subject: "agt_123",
+			Username: "build-agent.00000000000000000000000000000004",
+		},
 		CredentialSources: map[string]credentialSource{
 			testCredentialSourceReference: {
 				ResourceIndicator: credential.ResourceIndicator, AuthorizationDetails: credential.AuthorizationDetails,

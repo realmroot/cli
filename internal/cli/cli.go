@@ -192,8 +192,23 @@ func (a *App) parseExecFlags(args []string) ([]string, execOptions, error) {
 
 func (a *App) agentCommand() *cobra.Command {
 	command := &cobra.Command{Use: "agent", Short: "Manage this stable Agent identity and its Resource access"}
+	var username string
+	var nickname string
+	enroll := &cobra.Command{
+		Use:   "enroll --username <username>",
+		Short: "Enroll this Agent with controller approval",
+		Args:  cobra.NoArgs,
+		RunE: func(command *cobra.Command, _ []string) error {
+			if strings.TrimSpace(username) == "" {
+				return errors.New("--username is required")
+			}
+			return a.enroll(command, username, nickname)
+		},
+	}
+	enroll.Flags().StringVar(&username, "username", "", "immutable Agent username")
+	enroll.Flags().StringVar(&nickname, "nickname", "", "Agent nickname (defaults to the detected runtime)")
 	command.AddCommand(
-		&cobra.Command{Use: "enroll", Short: "Enroll this Agent with controller approval", Args: cobra.NoArgs, RunE: a.enroll},
+		enroll,
 		&cobra.Command{Use: "whoami", Short: "Print the current stable Agent identity", Args: cobra.NoArgs, RunE: a.whoami},
 		a.requestCommand(),
 	)
@@ -447,14 +462,14 @@ func removedToolboxOption(argument string) bool {
 	return false
 }
 
-func (a *App) enroll(command *cobra.Command, _ []string) error {
+func (a *App) enroll(command *cobra.Command, username, nickname string) error {
 	service, _, _, err := a.services()
 	if err != nil {
 		return err
 	}
 	ctx, cancel := context.WithTimeout(command.Context(), 15*time.Minute)
 	defer cancel()
-	identity, err := service.Enroll(ctx)
+	identity, err := service.Enroll(ctx, username, nickname)
 	if err != nil {
 		return err
 	}

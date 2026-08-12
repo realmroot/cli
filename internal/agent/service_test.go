@@ -11,6 +11,38 @@ import (
 
 const secondCredentialSourceReference = "rrcs_ZmVkY2JhOTg3NjU0MzIxMA"
 
+func TestExecutionIdentityUsesImmutableUsernameForGitAttribution(t *testing.T) {
+	// [spec: cli/native-resource-tool]
+	service, _ := serviceWithCredentialSources(t, map[string]credentialSource{
+		testCredentialSourceReference: sourceWithScopes(t, "workspace-1", []string{"contents:write"}),
+	})
+	configuration := decodedAgentConfiguration(t)
+	if err := service.states.StoreAgentConfiguration(service.origin, configuration, time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	target := agentTarget{
+		Runtime: defaultAgentRuntime, Origin: service.origin, Issuer: configuration.AgentIdentityIssuer,
+	}
+	state, err := service.states.Load(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.Name = "A Mutable Display Name"
+	state.Identity.Subject = "opaque-and-unreadable-subject"
+	state.Identity.Username = "codex.019feeeb650474ecbfdcda5259f73fc0"
+	if err := service.states.Update(target, state); err != nil {
+		t.Fatal(err)
+	}
+
+	identity, err := service.ExecutionIdentity(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if identity.Name != "codex.019feeeb650474ecbfdcda5259f73fc0" || identity.Email != "codex.019feeeb650474ecbfdcda5259f73fc0@agents.realmroot.dev" {
+		t.Fatalf("execution identity = %#v", identity)
+	}
+}
+
 func TestSelectedContextIsIndependentFromCredentialBindings(t *testing.T) {
 	service, resource := serviceWithCredentialSources(t, map[string]credentialSource{
 		testCredentialSourceReference: sourceWithScopes(t, "workspace-1", []string{"files:read"}),
@@ -380,6 +412,19 @@ func serviceWithCredentialSources(t *testing.T, sources map[string]credentialSou
 	}
 	t.Fatal("test requires a credential source")
 	return nil, ""
+}
+
+func decodedAgentConfiguration(t *testing.T) agentConfiguration {
+	t.Helper()
+	encoded, err := json.Marshal(testAgentConfiguration())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var configuration agentConfiguration
+	if err := json.Unmarshal(encoded, &configuration); err != nil {
+		t.Fatal(err)
+	}
+	return configuration
 }
 
 func writeActiveBindings(t *testing.T, service *Service, version int, items map[string]any) {

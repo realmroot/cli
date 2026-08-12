@@ -196,7 +196,7 @@ func resolveBootstrapCredentialSource(
 		return nil, nil
 	}
 	if stored.state.Identity == nil {
-		return nil, errors.New("Realmroot Agent enrollment is incomplete; rerun `realmroot agent enroll`")
+		return nil, errors.New("Realmroot Agent enrollment is incomplete; rerun `realmroot agent enroll --username <username>`")
 	}
 	return &bootstrapCredentialSource{reference: stored, configuration: configuration}, nil
 }
