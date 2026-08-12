@@ -33,6 +33,7 @@ func TestAuthHookIgnoresUnmarkedProfiles(t *testing.T) {
 }
 
 func TestEnrollmentAuthRegistersAgentThenWhoamiUsesTheEnrolledIdentity(t *testing.T) {
+	t.Setenv("AGENT", "codex")
 	t.Setenv("REALMROOT_AGENT_NAME", "Build Agent")
 	expectedHostName, err := hostDisplayName()
 	if err != nil {
