@@ -19,6 +19,7 @@ func TestResourceServerCommandName(t *testing.T) {
 		{identifier: "github", want: "github"},
 		{identifier: "platform", wantError: true},
 		{identifier: "get", wantError: true},
+		{identifier: "sync", wantError: true},
 	}
 	for _, test := range tests {
 		got, err := resourceServerCommandName(test.identifier)

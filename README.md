@@ -22,6 +22,7 @@ realmroot agent whoami
 realmroot version
 realmroot toolbox
 realmroot toolbox github
+realmroot toolbox sync github
 realmroot toolbox github context
 realmroot toolbox github context show realmroot
 realmroot toolbox github context use realmroot
@@ -81,6 +82,11 @@ prints its service-defined description and safe attributes; `context use`
 selects the default. Context selection is independent of permission requests
 and credential storage.
 
+Use `realmroot toolbox sync <resource-server>` after that Resource Server
+publishes a changed OpenAPI contract. Sync bypasses the cached OpenAPI document
+and atomically refreshes the generated command catalog. It does not request
+Resource authority or change the selected Context.
+
 Generated operations automatically choose the least-privileged approved offer
 inside the selected Context. `agent request`, generated operations, and `exec`
 accept `--context <name>` as a one-command override without changing the
@@ -88,7 +94,7 @@ default. `exec` uses all already-approved authority in that Context so opaque
 native protocols such as GraphQL work without exposing scope-selection or
 credential-selection internals. It never requests or expands authority.
 
-`platform` is reserved and always maps to the Resource Server whose published
+`platform` and `sync` are reserved Toolbox command names. `platform` always maps to the Resource Server whose published
 identifier is `realmroot`. Resource Server names also cannot collide with the
 generic HTTP verbs.
 

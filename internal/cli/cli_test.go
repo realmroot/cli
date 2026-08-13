@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -99,6 +102,29 @@ func TestToolboxHelpDoesNotCallRealmroot(t *testing.T) {
 	}
 }
 
+func TestToolboxHelpDocumentsLocalCommandSurface(t *testing.T) {
+	// [spec: cli/toolbox-command-discovery]
+	var stdout, stderr bytes.Buffer
+	command := New(&stdout, &stderr)
+	command.SetArgs([]string{"toolbox", "--help"})
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	output := stdout.String()
+	for _, expected := range []string{
+		"platform [operation...]",
+		"sync <resource-server>",
+		"get|head|post|put|patch|delete <target>",
+		"<resource-server> context",
+		"<resource-server> context show <name>",
+		"<resource-server> context use <name>",
+	} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("help omitted %q:\n%s", expected, output)
+		}
+	}
+}
+
 func TestAgentEnrollRequiresExplicitUsernameAndDocumentsOptionalNickname(t *testing.T) {
 	// [spec: cli/agent-enrollment]
 	var stdout, stderr bytes.Buffer
@@ -178,6 +204,63 @@ func TestResourceServerContextUsesDisplayContractWithoutRawDetails(t *testing.T)
 	if !summaries[0].Current || !strings.Contains(output, `"name":"realmroot"`) ||
 		strings.Contains(output, "installation_id") || strings.Contains(output, "authorizationDetail") {
 		t.Fatalf("Context summaries = %s", output)
+	}
+}
+
+func TestResourceServerSyncRefreshesCachedOpenAPICommands(t *testing.T) {
+	// [spec: cli/resource-server-sync]
+	t.Setenv("RSH_CONFIG_DIR", filepath.Join(t.TempDir(), "config"))
+	t.Setenv("RSH_CACHE_DIR", filepath.Join(t.TempDir(), "cache"))
+	updated := false
+	specRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/openapi.json" {
+			http.NotFound(response, request)
+			return
+		}
+		specRequests++
+		response.Header().Set("Cache-Control", "max-age=3600")
+		response.Header().Set("Content-Type", "application/json")
+		operationID := "getOldCommand"
+		if updated {
+			operationID = "getNewCommand"
+		}
+		fmt.Fprintf(response, `{"openapi":"3.1.0","info":{"title":"Commands","version":"1.0.0"},"paths":{"/command":{"get":{"operationId":%q,"responses":{"200":{"description":"OK"}}}}}}`, operationID)
+	}))
+	defer server.Close()
+
+	service, err := agent.NewService(server.URL, server.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := &restish.Config{APIs: map[string]*restish.APIConfig{
+		"github": {BaseURL: server.URL, SpecURL: server.URL + "/openapi.json", UnauthenticatedSpec: true},
+	}}
+	app := &App{stdout: &bytes.Buffer{}, stderr: &bytes.Buffer{}}
+	inspect := func() restish.APIInspection {
+		runtime, runtimeErr := app.newRestishRuntime(service, config)
+		if runtimeErr != nil {
+			t.Fatal(runtimeErr)
+		}
+		inspection, inspectErr := runtime.InspectAPI(t.Context(), "github", "default")
+		if inspectErr != nil {
+			t.Fatal(inspectErr)
+		}
+		return inspection
+	}
+
+	if got := inspect().Operations[0].ID; got != "getOldCommand" {
+		t.Fatalf("initial operation = %q", got)
+	}
+	updated = true
+	if got := inspect().Operations[0].ID; got != "getOldCommand" || specRequests != 1 {
+		t.Fatalf("cached operation = %q, spec requests = %d", got, specRequests)
+	}
+	if err := app.syncResourceServerConfig(service, config, "github"); err != nil {
+		t.Fatal(err)
+	}
+	if got := inspect().Operations[0].ID; got != "getNewCommand" || specRequests != 2 {
+		t.Fatalf("synced operation = %q, spec requests = %d", got, specRequests)
 	}
 }
 

@@ -15,11 +15,7 @@ import (
 	restish "github.com/saltbo/restish/v2"
 )
 
-var reservedNames = map[string]bool{
-	"platform": true, "get": true, "head": true, "post": true,
-	"put": true, "patch": true, "delete": true, "help": true,
-	"completion": true, "version": true, "exec": true,
-}
+var reservedNames = reservedResourceServerNames()
 
 type Scope struct {
 	Value       string `json:"value"`

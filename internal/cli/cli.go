@@ -270,6 +270,7 @@ func (a *App) toolboxCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:                "toolbox [resource-server [operation...]]",
 		Short:              "Discover and operate Resource Servers",
+		Long:               toolboxHelp(),
 		DisableFlagParsing: true,
 		Args:               cobra.ArbitraryArgs,
 		RunE: func(command *cobra.Command, args []string) error {
@@ -292,6 +293,12 @@ func (a *App) toolboxCommand() *cobra.Command {
 					return errors.New("--search, --scope, and --all require a Resource Server name")
 				}
 				return a.listResourceServers(ctx, catalogClient)
+			}
+			if args[0] == "sync" {
+				if len(args) != 2 || a.discoveryOptions().active() || a.context != "" {
+					return errors.New("usage: realmroot toolbox sync <resource-server>")
+				}
+				return a.syncResourceServer(ctx, agentService, catalogClient, args[1])
 			}
 			if len(args) == 1 && !genericHTTPMethod(args[0]) {
 				return a.showResourceServer(ctx, agentService, catalogClient, args[0])
@@ -326,6 +333,42 @@ func (a *App) toolboxCommand() *cobra.Command {
 	command.Flags().Int("retry", 2, "maximum transient retry attempts")
 	command.Flags().CountP("verbose", "v", "show request and response diagnostics")
 	return command
+}
+
+type syncResult struct {
+	ResourceServer string `json:"resourceServer"`
+	Synced         bool   `json:"synced"`
+}
+
+func (a *App) syncResourceServer(ctx context.Context, service *agent.Service, client *catalog.Client, name string) error {
+	config, _, err := client.RestishConfig(ctx)
+	if err != nil {
+		return err
+	}
+	if config.APIs[name] == nil {
+		return fmt.Errorf("Resource Server %q is not available", name)
+	}
+	if err := a.syncResourceServerConfig(service, config, name); err != nil {
+		return err
+	}
+	result := syncResult{ResourceServer: name, Synced: true}
+	if a.json {
+		return a.printJSON(result)
+	}
+	fmt.Fprintf(a.stdout, "Synced OpenAPI commands for %s.\n", name)
+	return nil
+}
+
+func (a *App) syncResourceServerConfig(service *agent.Service, config *restish.Config, name string) error {
+	runtime, err := a.newRestishRuntimeWithSupportCommands(service, config)
+	if err != nil {
+		return err
+	}
+	runtime.Stdout = io.Discard
+	if err := runtime.Run([]string{"realmroot toolbox", "api", "sync", name}); err != nil {
+		return toolboxRuntimeError{cause: err}
+	}
+	return nil
 }
 
 func (a *App) parseToolboxFlags(args []string) ([]string, error) {
@@ -810,6 +853,20 @@ func (e toolboxRuntimeError) Error() string {
 func (e toolboxRuntimeError) Unwrap() error { return e.cause }
 
 func (a *App) newRestishRuntime(service *agent.Service, config *restish.Config) (*restish.CLI, error) {
+	return a.newRestishRuntimeWithCommandSurface(service, config, restish.CommandSurface{
+		HTTPMethods: []string{"get", "head", "post", "put", "patch", "delete"}, RegisteredAPIs: true, HideSupportCommands: true,
+		MetadataRefreshTimeout: 30 * time.Second, IgnoreUserConfig: true, DisablePlugins: true, HideInternalFlags: true,
+		CompactOperationHelp: true,
+	})
+}
+
+func (a *App) newRestishRuntimeWithSupportCommands(service *agent.Service, config *restish.Config) (*restish.CLI, error) {
+	return a.newRestishRuntimeWithCommandSurface(service, config, restish.CommandSurface{
+		IgnoreUserConfig: true, DisablePlugins: true, HideInternalFlags: true,
+	})
+}
+
+func (a *App) newRestishRuntimeWithCommandSurface(service *agent.Service, config *restish.Config, surface restish.CommandSurface) (*restish.CLI, error) {
 	if err := configureRestishPaths(); err != nil {
 		return nil, err
 	}
@@ -817,11 +874,7 @@ func (a *App) newRestishRuntime(service *agent.Service, config *restish.Config) 
 	runtime.SetCommandName("realmroot toolbox")
 	runtime.SetCommandDescription("Operate Realmroot Resource Servers", "OpenAPI-generated and generic HTTP operations for discovered Resource Servers.")
 	runtime.SetDefaultConfig(config)
-	runtime.SetCommandSurface(restish.CommandSurface{
-		HTTPMethods: []string{"get", "head", "post", "put", "patch", "delete"}, RegisteredAPIs: true, HideSupportCommands: true,
-		MetadataRefreshTimeout: 30 * time.Second, IgnoreUserConfig: true, DisablePlugins: true, HideInternalFlags: true,
-		CompactOperationHelp: true,
-	})
+	runtime.SetCommandSurface(surface)
 	runtime.AddAuthHandler("dpop", restish.NewDPoPAuthHandler(service.CredentialSource()))
 	runtime.AddResponseMiddleware(agent.NewInteractiveResponseMiddleware(runtime, service.OpenApproval, a.stderr, a.noBrowser, "default"))
 	runtime.Stdout, runtime.Stderr = a.stdout, a.stderr
@@ -849,12 +902,20 @@ func (a *App) printJSON(value any) error {
 }
 
 func genericHTTPMethod(value string) bool {
-	switch value {
-	case "get", "head", "post", "put", "patch", "delete":
-		return true
-	default:
-		return false
+	return catalog.IsGenericHTTPMethod(value)
+}
+
+func toolboxHelp() string {
+	var help strings.Builder
+	help.WriteString("Discover and operate Resource Servers\n\nToolbox Commands:\n")
+	for _, command := range catalog.ToolboxCommands() {
+		fmt.Fprintf(&help, "  %-43s %s\n", command.Usage, command.Description)
 	}
+	fmt.Fprintf(&help, "  %-43s %s\n", strings.Join(catalog.GenericHTTPMethods(), "|")+" <target>", "send a generic HTTP request")
+	for _, command := range catalog.ResourceServerCommands() {
+		fmt.Fprintf(&help, "  %-43s %s\n", command.Usage, command.Description)
+	}
+	return strings.TrimRight(help.String(), "\n")
 }
 
 func configureRestishPaths() error {

@@ -23,6 +23,14 @@ Feature: Realmroot Toolbox command line
     Then every available Resource Server is listed with its command name and connection state
     And the Realmroot Resource Server uses the reserved command name "platform"
 
+  @journey:toolbox-command-discovery @entrypoint:toolbox-help
+  Scenario: Discover Toolbox local commands
+    When the Agent runs "realmroot toolbox --help"
+    Then Toolbox documents the reserved "platform" alias and local "sync" command
+    And it documents the generic HTTP methods
+    And it documents the Resource Server "context" commands
+    But it does not expose embedded Restish support commands
+
   @journey:resource-server-authority @entrypoint:toolbox-resource-server
   Scenario: Inspect one Resource Server authority
     Given the Agent is enrolled
@@ -43,6 +51,15 @@ Feature: Realmroot Toolbox command line
     Then subsequent GitHub operations use that Context by default
     And "--context" can override it for one operation without changing the default
     But authorization details and credential references are never exposed
+
+  @journey:resource-server-sync @entrypoint:toolbox-sync
+  Scenario: Refresh one Resource Server command catalog
+    Given Toolbox has cached OpenAPI-generated commands for a Resource Server
+    And that Resource Server publishes an updated OpenAPI contract
+    When the Agent runs "realmroot toolbox sync github"
+    Then Toolbox fetches the current OpenAPI contract without using the cached document
+    And subsequent Toolbox discovery and invocation use the refreshed generated commands
+    But the sync does not request Resource authority or change the selected Context
 
   @journey:task-scoped-access @entrypoint:agent-request
   Scenario: Request exact Resource access
