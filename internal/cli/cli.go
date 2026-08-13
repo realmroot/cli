@@ -143,7 +143,8 @@ func (a *App) execCommand() *cobra.Command {
 			}
 			runner := execution.NewRunner(service, httpClient, command.InOrStdin(), a.stdout, a.stderr)
 			return runner.Run(command.Context(), server, integrations, args, execution.RunOptions{
-				AuthorizationDetails: selected,
+				AuthorizationDetails:      selected,
+				ExactAuthorizationContext: true,
 			})
 		},
 	}
@@ -617,6 +618,8 @@ func (a *App) showResourceServer(ctx context.Context, service *agent.Service, cl
 		binding, bindErr = service.BindingForAuthorizationContextAllAuthority(server.ResourceURL, selected)
 	} else if len(details) == 1 {
 		binding, bindErr = service.BindingForAuthorizationContextAllAuthority(server.ResourceURL, []map[string]any{details[0].AuthorizationDetail})
+	} else if len(server.AuthorizationDetails) == 0 {
+		binding, bindErr = service.BindingForAuthorizationContextAllAuthority(server.ResourceURL, nil)
 	} else {
 		binding, bindErr = service.BindingForResource(server.ResourceURL)
 	}

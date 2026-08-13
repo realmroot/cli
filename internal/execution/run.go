@@ -25,7 +25,8 @@ type Runner struct {
 }
 
 type RunOptions struct {
-	AuthorizationDetails []map[string]any
+	AuthorizationDetails      []map[string]any
+	ExactAuthorizationContext bool
 }
 
 func NewRunner(service *agent.Service, client *http.Client, stdin io.Reader, stdout, stderr io.Writer) *Runner {
@@ -40,7 +41,12 @@ func (r *Runner) Run(ctx context.Context, server catalog.ResourceServer, integra
 	if err != nil {
 		return err
 	}
-	binding, err := r.service.ExecutionBinding(server.ResourceURL, options.AuthorizationDetails)
+	var binding agent.CredentialBinding
+	if options.ExactAuthorizationContext {
+		binding, _, err = r.service.BindingForAuthorizationContext(server.ResourceURL, options.AuthorizationDetails)
+	} else {
+		binding, err = r.service.ExecutionBinding(server.ResourceURL, options.AuthorizationDetails)
+	}
 	if err != nil {
 		return fmt.Errorf("load selected %s Context authority: %w; inspect Contexts with `realmroot toolbox %s context` or request access with `realmroot agent request`", server.CommandName, err, server.CommandName)
 	}
