@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -303,6 +304,16 @@ func TestExecutionBindingReportsMissingAndInvalidAuthorityState(t *testing.T) {
 		}
 		if _, err := service.ExecutionBinding(resource, nil); err == nil {
 			t.Fatal("invalid active binding was accepted")
+		}
+	})
+
+	t.Run("previous active binding version", func(t *testing.T) {
+		service, resource := serviceWithCredentialSources(t, map[string]credentialSource{
+			testCredentialSourceReference: sourceWithScopes(t, "workspace-1", []string{"files:read"}),
+		})
+		writeActiveBindings(t, service, 1, map[string]any{resource: testCredentialSourceReference})
+		if _, err := service.ExecutionBinding(resource, nil); err == nil || !strings.Contains(err.Error(), "unsupported version") {
+			t.Fatalf("previous active binding version was not rejected: %v", err)
 		}
 	})
 
