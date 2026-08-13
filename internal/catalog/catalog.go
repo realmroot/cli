@@ -264,7 +264,7 @@ func (c *Client) AgentSkills(ctx context.Context, server ResourceServer) (AgentS
 			return AgentSkillsIndex{}, fmt.Errorf("read %s Agent Skills index content type: %w", server.CommandName, parseErr)
 		}
 		if mediaType != "application/json" && !strings.HasSuffix(mediaType, "+json") {
-			return AgentSkillsIndex{}, fmt.Errorf("read %s Agent Skills index: unsupported content type %q", server.CommandName, mediaType)
+			return AgentSkillsIndex{}, fmt.Errorf("%w: %q returned %s", ErrNoAgentSkills, server.CommandName, mediaType)
 		}
 	}
 	const maxIndexBytes = 1 << 20

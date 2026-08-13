@@ -139,6 +139,28 @@ func TestAgentSkillsDistinguishesMissingIndex(t *testing.T) {
 	}
 }
 
+func TestAgentSkillsTreatsNonJSONIndexAsMissing(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		response.Header().Set("content-type", "text/html; charset=utf-8")
+		_, _ = response.Write([]byte(`<html></html>`))
+	}))
+	defer server.Close()
+	service, err := agent.NewService(server.URL, server.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := New(service, server.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = client.AgentSkills(context.Background(), ResourceServer{CommandName: "example", ResourceURL: server.URL})
+	if !errors.Is(err, ErrNoAgentSkills) {
+		t.Fatalf("error = %v", err)
+	}
+}
+
 func TestAgentSkillsRejectsInvalidDigest(t *testing.T) {
 	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
