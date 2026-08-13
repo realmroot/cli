@@ -5,10 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"mime"
 	"net/http"
+	"net/url"
+	"regexp"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/realmroot/toolbox/internal/agent"
 	"github.com/realmroot/toolbox/internal/realmrootapi"
@@ -52,6 +56,25 @@ type ToolIntegration struct {
 }
 
 var ErrNoToolIntegrations = errors.New("Resource Server does not advertise native tool integrations")
+var ErrNoAgentSkills = errors.New("Resource Server does not publish an Agent Skills index")
+
+const agentSkillsSchema = "https://schemas.agentskills.io/discovery/0.2.0/schema.json"
+
+var skillNamePattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$`)
+var skillDigestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+
+type AgentSkill struct {
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	Description string `json:"description"`
+	URL         string `json:"url"`
+	Digest      string `json:"digest"`
+}
+
+type AgentSkillsIndex struct {
+	URL    string       `json:"url"`
+	Skills []AgentSkill `json:"skills"`
+}
 
 type Client struct {
 	api   *realmrootapi.ClientWithResponses
@@ -204,6 +227,93 @@ func (c *Client) ToolIntegrations(ctx context.Context, server ResourceServer) ([
 		}
 	}
 	return document.ToolIntegrations, nil
+}
+
+func (c *Client) AgentSkills(ctx context.Context, server ResourceServer) (AgentSkillsIndex, error) {
+	resourceURL, err := url.Parse(server.ResourceURL)
+	if err != nil || resourceURL.Scheme == "" || resourceURL.Host == "" {
+		return AgentSkillsIndex{}, fmt.Errorf("resolve %s Agent Skills origin: invalid Resource URL", server.CommandName)
+	}
+	indexURL := &url.URL{Scheme: resourceURL.Scheme, Host: resourceURL.Host, Path: "/.well-known/agent-skills/index.json"}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, indexURL.String(), nil)
+	if err != nil {
+		return AgentSkillsIndex{}, err
+	}
+	response, err := c.agent.HTTPClient().Do(request)
+	if err != nil {
+		return AgentSkillsIndex{}, fmt.Errorf("read %s Agent Skills index: %w", server.CommandName, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode == http.StatusNotFound {
+		return AgentSkillsIndex{}, fmt.Errorf("%w: %q", ErrNoAgentSkills, server.CommandName)
+	}
+	if response.StatusCode != http.StatusOK {
+		return AgentSkillsIndex{}, fmt.Errorf("read %s Agent Skills index: HTTP %d", server.CommandName, response.StatusCode)
+	}
+	if contentType := response.Header.Get("Content-Type"); contentType != "" {
+		mediaType, _, parseErr := mime.ParseMediaType(contentType)
+		if parseErr != nil {
+			return AgentSkillsIndex{}, fmt.Errorf("read %s Agent Skills index content type: %w", server.CommandName, parseErr)
+		}
+		if mediaType != "application/json" && !strings.HasSuffix(mediaType, "+json") {
+			return AgentSkillsIndex{}, fmt.Errorf("read %s Agent Skills index: unsupported content type %q", server.CommandName, mediaType)
+		}
+	}
+	const maxIndexBytes = 1 << 20
+	body, err := io.ReadAll(io.LimitReader(response.Body, maxIndexBytes+1))
+	if err != nil {
+		return AgentSkillsIndex{}, fmt.Errorf("read %s Agent Skills index body: %w", server.CommandName, err)
+	}
+	if len(body) > maxIndexBytes {
+		return AgentSkillsIndex{}, fmt.Errorf("read %s Agent Skills index: response exceeds %d bytes", server.CommandName, maxIndexBytes)
+	}
+	var document struct {
+		Schema string        `json:"$schema"`
+		Skills *[]AgentSkill `json:"skills"`
+	}
+	if err := json.Unmarshal(body, &document); err != nil {
+		return AgentSkillsIndex{}, fmt.Errorf("decode %s Agent Skills index: %w", server.CommandName, err)
+	}
+	if document.Schema != agentSkillsSchema {
+		return AgentSkillsIndex{}, fmt.Errorf("read %s Agent Skills index: unsupported schema %q", server.CommandName, document.Schema)
+	}
+	if document.Skills == nil {
+		return AgentSkillsIndex{}, fmt.Errorf("read %s Agent Skills index: skills array is required", server.CommandName)
+	}
+	skills := *document.Skills
+	seenNames := make(map[string]bool, len(skills))
+	for index := range skills {
+		skill := &skills[index]
+		if !skillNamePattern.MatchString(skill.Name) || strings.Contains(skill.Name, "--") {
+			return AgentSkillsIndex{}, fmt.Errorf("read %s Agent Skills index: invalid skill name %q", server.CommandName, skill.Name)
+		}
+		if seenNames[skill.Name] {
+			return AgentSkillsIndex{}, fmt.Errorf("read %s Agent Skills index: duplicate skill name %q", server.CommandName, skill.Name)
+		}
+		seenNames[skill.Name] = true
+		if skill.Type != "skill-md" && skill.Type != "archive" {
+			return AgentSkillsIndex{}, fmt.Errorf("read %s Agent Skills index: invalid type %q for %s", server.CommandName, skill.Type, skill.Name)
+		}
+		if strings.TrimSpace(skill.Description) == "" || utf8.RuneCountInString(skill.Description) > 1024 {
+			return AgentSkillsIndex{}, fmt.Errorf("read %s Agent Skills index: invalid description for %s", server.CommandName, skill.Name)
+		}
+		if !skillDigestPattern.MatchString(skill.Digest) {
+			return AgentSkillsIndex{}, fmt.Errorf("read %s Agent Skills index: invalid digest for %s", server.CommandName, skill.Name)
+		}
+		if skill.URL == "" {
+			return AgentSkillsIndex{}, fmt.Errorf("read %s Agent Skills index: URL is required for %s", server.CommandName, skill.Name)
+		}
+		artifactURL, parseErr := url.Parse(skill.URL)
+		if parseErr != nil {
+			return AgentSkillsIndex{}, fmt.Errorf("read %s Agent Skills index: invalid URL for %s", server.CommandName, skill.Name)
+		}
+		resolved := indexURL.ResolveReference(artifactURL)
+		if (resolved.Scheme != "http" && resolved.Scheme != "https") || resolved.Host == "" {
+			return AgentSkillsIndex{}, fmt.Errorf("read %s Agent Skills index: unsupported URL for %s", server.CommandName, skill.Name)
+		}
+		skill.URL = resolved.String()
+	}
+	return AgentSkillsIndex{URL: indexURL.String(), Skills: skills}, nil
 }
 
 func (c *Client) RestishConfig(ctx context.Context) (*restish.Config, []ResourceServer, error) {

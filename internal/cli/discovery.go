@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 	"unicode"
@@ -53,6 +55,15 @@ type operationSummary struct {
 	ScopeAlternatives [][]string `json:"scopeAlternatives,omitempty"`
 }
 
+type agentSkillSummary struct {
+	Name           string `json:"name"`
+	Type           string `json:"type"`
+	Description    string `json:"description"`
+	URL            string `json:"url"`
+	Digest         string `json:"digest"`
+	InstallCommand string `json:"installCommand"`
+}
+
 type resourceServerOverview struct {
 	ResourceServer   resourceServerSummary `json:"resourceServer"`
 	Mode             string                `json:"mode"`
@@ -68,6 +79,47 @@ type resourceServerOverview struct {
 	Contexts         []contextListItem     `json:"contexts,omitempty"`
 	Operations       []operationSummary    `json:"operations,omitempty"`
 	NativeCommands   []string              `json:"nativeCommands,omitempty"`
+	SkillIndexURL    string                `json:"skillIndexUrl,omitempty"`
+	Skills           []agentSkillSummary   `json:"skills,omitempty"`
+	SkillError       string                `json:"skillDiscoveryError,omitempty"`
+}
+
+func summarizeAgentSkills(index catalog.AgentSkillsIndex, runtime string) ([]agentSkillSummary, error) {
+	indexURL, err := url.Parse(index.URL)
+	if err != nil || indexURL.Scheme == "" || indexURL.Host == "" {
+		return nil, fmt.Errorf("build Agent Skill install command: invalid discovery index URL %q", index.URL)
+	}
+	source := (&url.URL{Scheme: indexURL.Scheme, Host: indexURL.Host}).String()
+	agentName := skillInstallerAgent(runtime)
+	summaries := make([]agentSkillSummary, 0, len(index.Skills))
+	for _, skill := range index.Skills {
+		command := fmt.Sprintf("npx skills add %s --skill %s", source, skill.Name)
+		if agentName != "" {
+			command += " --agent " + agentName
+		}
+		command += " --global"
+		summaries = append(summaries, agentSkillSummary{
+			Name: skill.Name, Type: skill.Type, Description: skill.Description,
+			URL: skill.URL, Digest: skill.Digest, InstallCommand: command,
+		})
+	}
+	return summaries, nil
+}
+
+func skillInstallerAgent(runtime string) string {
+	return map[string]string{
+		"antigravity": "antigravity",
+		"claude":      "claude-code",
+		"codex":       "codex",
+		"copilot":     "github-copilot",
+		"cursor":      "cursor",
+		"gemini":      "gemini-cli",
+		"goose":       "goose",
+		"kiro":        "kiro-cli",
+		"opencode":    "opencode",
+		"pi":          "pi",
+		"qwen":        "qwen-code",
+	}[runtime]
 }
 
 type nativeToolSummary struct {

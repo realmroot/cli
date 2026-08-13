@@ -101,6 +101,12 @@ generic HTTP verbs.
 Running `realmroot toolbox <resource-server>` prints that server's connection
 state and capability inventory. Small APIs include every published scope,
 Context summary, and generated operation with its exact required scopes.
+When the Resource Server origin publishes an Agent Skills Discovery v0.2.0
+index, the overview also includes each Skill's Level 1 metadata and advertised
+artifact digest. It also emits a copyable `npx skills add` command targeting
+the detected Agent runtime when the installer supports it; other runtimes get
+a runtime-neutral command so the installer can discover an available target.
+Toolbox does not download archives or execute Skill scripts during discovery.
 Large APIs automatically use a compact summary so discovery cannot flood an
 Agent's context. Connected-account scopes and current Agent authority are
 labeled separately. Use `--search` to match commands, summaries, methods,

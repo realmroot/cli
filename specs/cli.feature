@@ -41,6 +41,18 @@ Feature: Realmroot Toolbox command line
     And its OpenAPI-generated operation groups are discoverable through command help
     But large operation descriptions, schemas, examples, and response models do not flood ordinary help
 
+  @journey:resource-server-skills @entrypoint:toolbox-resource-server
+  Scenario: Discover instructions published by one Resource Server
+    Given the Resource Server publishes an Agent Skills Discovery version 0.2.0 index
+    When the Agent runs "realmroot toolbox github"
+    Then Toolbox lists each Skill name, description, artifact type, URL, and SHA-256 digest
+    And each Skill includes a copyable install command targeting the detected supported Agent runtime
+    And unsupported runtimes receive a runtime-neutral install command
+    And relative artifact URLs are resolved against the discovery index URL
+    But Toolbox does not download Skill archives or execute bundled scripts during discovery
+    And a missing Skill index does not hide the Resource Server's OpenAPI commands
+    And an invalid Skill index is reported without hiding those commands
+
   @journey:resource-server-context @entrypoint:toolbox-context
   Scenario: Inspect and select one Resource Server Context
     Given the Resource Server exposes one or more Contexts with service-defined names and attributes

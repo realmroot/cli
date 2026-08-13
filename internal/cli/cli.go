@@ -594,6 +594,23 @@ func (a *App) showResourceServer(ctx context.Context, service *agent.Service, cl
 	} else if !errors.Is(integrationsErr, catalog.ErrNoToolIntegrations) {
 		return integrationsErr
 	}
+	skillIndex, skillsErr := client.AgentSkills(ctx, server)
+	if skillsErr == nil {
+		if len(skillIndex.Skills) > 0 {
+			agentRuntime, runtimeErr := service.Runtime()
+			if runtimeErr != nil {
+				return runtimeErr
+			}
+			skills, summarizeErr := summarizeAgentSkills(skillIndex, agentRuntime)
+			if summarizeErr != nil {
+				return summarizeErr
+			}
+			overview.Skills = skills
+		}
+		overview.SkillIndexURL = skillIndex.URL
+	} else if !errors.Is(skillsErr, catalog.ErrNoAgentSkills) {
+		overview.SkillError = skillsErr.Error()
+	}
 	var binding agent.CredentialBinding
 	var bindErr error
 	if len(selected) > 0 {
@@ -630,6 +647,7 @@ func (a *App) printResourceServerOverview(overview resourceServerOverview) error
 		fmt.Fprintln(a.stdout, "Agent authority: not requested")
 	}
 	a.printNativeCommands(server.CommandName, overview.NativeCommands)
+	a.printAgentSkills(overview)
 	if overview.Mode == overviewModeCompact {
 		fmt.Fprintf(a.stdout, "\nCapabilities:\n  Operations: %d\n  Published scopes: %d\n  Contexts: %d\n", overview.OperationCount, overview.ScopeCount, overview.ContextCount)
 		a.printContextSummary(overview)
@@ -683,6 +701,20 @@ func (a *App) printResourceServerOverview(overview resourceServerOverview) error
 		fmt.Fprintf(a.stdout, "\nShowing %d of %d matches. Add --all to show every match.\n", len(overview.Operations), overview.MatchCount)
 	}
 	return nil
+}
+
+func (a *App) printAgentSkills(overview resourceServerOverview) {
+	if overview.SkillError != "" {
+		fmt.Fprintf(a.stdout, "\nAgent Skills discovery error: %s\n", overview.SkillError)
+		return
+	}
+	if len(overview.Skills) == 0 {
+		return
+	}
+	fmt.Fprintf(a.stdout, "\nAgent Skills (%s):\n", overview.SkillIndexURL)
+	for _, skill := range overview.Skills {
+		fmt.Fprintf(a.stdout, "  %s (%s) — %s\n    artifact: %s\n    digest: %s\n    install: %s\n", skill.Name, skill.Type, skill.Description, skill.URL, skill.Digest, skill.InstallCommand)
+	}
 }
 
 func (a *App) listNativeTools(ctx context.Context, client *catalog.Client) error {

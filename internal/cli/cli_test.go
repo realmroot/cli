@@ -705,6 +705,100 @@ func TestResourceServerOverviewAdvertisesNativeCommands(t *testing.T) {
 	}
 }
 
+func TestResourceServerOverviewAdvertisesAgentSkills(t *testing.T) {
+	var stdout bytes.Buffer
+	app := &App{stdout: &stdout}
+	overview := resourceServerOverview{
+		ResourceServer: resourceServerSummary{CommandName: "github", Identifier: "github", Name: "GitHub"},
+		Mode:           overviewModeCompact,
+		SkillIndexURL:  "https://api.github.example/.well-known/agent-skills/index.json",
+		Skills: []agentSkillSummary{{
+			Name: "github-workflow", Type: "archive", Description: "Operate repositories through Toolbox.",
+			URL:            "https://api.github.example/.well-known/agent-skills/github-workflow.tar.gz",
+			Digest:         "sha256:" + strings.Repeat("a", 64),
+			InstallCommand: "npx skills add https://api.github.example --skill github-workflow --agent codex --global",
+		}},
+	}
+
+	if err := app.printResourceServerOverview(overview); err != nil {
+		t.Fatal(err)
+	}
+	output := stdout.String()
+	for _, expected := range []string{
+		"Agent Skills (https://api.github.example/.well-known/agent-skills/index.json):",
+		"github-workflow (archive) — Operate repositories through Toolbox.",
+		"artifact: https://api.github.example/.well-known/agent-skills/github-workflow.tar.gz",
+		"digest: sha256:" + strings.Repeat("a", 64),
+		"install: npx skills add https://api.github.example --skill github-workflow --agent codex --global",
+	} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("output omitted %q:\n%s", expected, output)
+		}
+	}
+}
+
+func TestSummarizeAgentSkillsTargetsDetectedRuntime(t *testing.T) {
+	index := catalog.AgentSkillsIndex{
+		URL: "https://api.github.example/.well-known/agent-skills/index.json",
+		Skills: []catalog.AgentSkill{{
+			Name: "github-workflow", Type: "skill-md", Description: "Operate repositories.",
+			URL:    "https://api.github.example/.well-known/agent-skills/github-workflow/SKILL.md",
+			Digest: "sha256:" + strings.Repeat("a", 64),
+		}},
+	}
+
+	skills, err := summarizeAgentSkills(index, "claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := skills[0].InstallCommand; got != "npx skills add https://api.github.example --skill github-workflow --agent claude-code --global" {
+		t.Fatalf("install command = %q", got)
+	}
+	encoded, err := json.Marshal(skills)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(encoded), `"installCommand":"npx skills add https://api.github.example --skill github-workflow --agent claude-code --global"`) {
+		t.Fatalf("skills JSON = %s", encoded)
+	}
+}
+
+func TestSummarizeAgentSkillsLeavesUnsupportedRuntimeForInstallerDiscovery(t *testing.T) {
+	index := catalog.AgentSkillsIndex{
+		URL: "https://api.github.example/.well-known/agent-skills/index.json",
+		Skills: []catalog.AgentSkill{{
+			Name: "github-workflow", Type: "skill-md", Description: "Operate repositories.",
+			URL:    "https://api.github.example/.well-known/agent-skills/github-workflow/SKILL.md",
+			Digest: "sha256:" + strings.Repeat("a", 64),
+		}},
+	}
+
+	skills, err := summarizeAgentSkills(index, "hermes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := skills[0].InstallCommand; got != "npx skills add https://api.github.example --skill github-workflow --global" {
+		t.Fatalf("install command = %q", got)
+	}
+}
+
+func TestResourceServerOverviewReportsAgentSkillDiscoveryError(t *testing.T) {
+	var stdout bytes.Buffer
+	app := &App{stdout: &stdout}
+	overview := resourceServerOverview{
+		ResourceServer: resourceServerSummary{CommandName: "github", Identifier: "github", Name: "GitHub"},
+		Mode:           overviewModeCompact,
+		SkillError:     "unsupported schema",
+	}
+
+	if err := app.printResourceServerOverview(overview); err != nil {
+		t.Fatal(err)
+	}
+	if output := stdout.String(); !strings.Contains(output, "Agent Skills discovery error: unsupported schema") || !strings.Contains(output, "Discover operations:") {
+		t.Fatalf("output = %q", output)
+	}
+}
+
 func TestNativeToolSummaryListsExactCommandForms(t *testing.T) {
 	var stdout bytes.Buffer
 	app := &App{stdout: &stdout}

@@ -84,6 +84,8 @@ func NewService(origin string, client *http.Client) (*Service, error) {
 
 func (s *Service) Origin() string { return s.origin }
 
+func (s *Service) Runtime() (string, error) { return agentRuntime() }
+
 func (s *Service) APIBaseURL() string { return s.origin + "/api" }
 
 func (s *Service) HTTPClient() *http.Client { return s.client }
