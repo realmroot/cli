@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +14,41 @@ import (
 	"github.com/realmroot/toolbox/internal/catalog"
 	restish "github.com/saltbo/restish/v2"
 )
+
+func TestNativeResourceToolReportsUnresolvedScopeAlternatives(t *testing.T) {
+	t.Parallel()
+	upstream := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		response.Header().Set("WWW-Authenticate", `DPoP error="insufficient_scope", scope="contents:write workflows:write"`)
+		response.WriteHeader(http.StatusForbidden)
+	}))
+	defer upstream.Close()
+	broker, err := NewBroker(
+		upstream.URL,
+		"rrcs_reference",
+		[]string{"contents:read"},
+		&fakeSource{resource: upstream.URL},
+		func(string, [][]string) ([]string, error) { return nil, os.ErrNotExist },
+		upstream.Client(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer broker.Close()
+	base, err := broker.StartTCP(func(request *http.Request) (string, error) { return request.URL.RequestURI(), nil }, func(*http.Request) bool { return true })
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.Get(base + "/repository")
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+
+	alternatives := broker.UnresolvedScopeAlternatives()
+	if len(alternatives) != 1 || strings.Join(alternatives[0], " ") != "contents:write workflows:write" {
+		t.Fatalf("alternatives = %#v", alternatives)
+	}
+}
 
 func TestNativeResourceToolUsesEphemeralDPoPBroker(t *testing.T) {
 	t.Parallel()
