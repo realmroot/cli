@@ -27,16 +27,17 @@ type Scope struct {
 }
 
 type ResourceServer struct {
-	ID               string   `json:"id"`
-	CommandName      string   `json:"commandName"`
-	Identifier       string   `json:"identifier"`
-	Name             string   `json:"name"`
-	Description      string   `json:"description,omitempty"`
-	ResourceURL      string   `json:"resourceUrl"`
-	Available        bool     `json:"available"`
-	ConnectionStatus string   `json:"connectionStatus"`
-	ConnectionScopes []string `json:"connectionScopes,omitempty"`
-	Scopes           []Scope  `json:"scopes"`
+	ID                   string           `json:"id"`
+	CommandName          string           `json:"commandName"`
+	Identifier           string           `json:"identifier"`
+	Name                 string           `json:"name"`
+	Description          string           `json:"description,omitempty"`
+	ResourceURL          string           `json:"resourceUrl"`
+	Available            bool             `json:"available"`
+	ConnectionStatus     string           `json:"connectionStatus"`
+	ConnectionScopes     []string         `json:"connectionScopes,omitempty"`
+	AuthorizationDetails []map[string]any `json:"authorizationDetails,omitempty"`
+	Scopes               []Scope          `json:"scopes"`
 }
 
 type AuthorizationDetail struct {
@@ -114,6 +115,13 @@ func (c *Client) List(ctx context.Context) ([]ResourceServer, error) {
 			if item.Connection.Status != "" {
 				server.ConnectionStatus = string(item.Connection.Status)
 				server.ConnectionScopes = append([]string(nil), item.Connection.AuthorizedScopes...)
+			}
+			for _, detail := range item.AuthorizationDetails {
+				value := map[string]any{"type": detail.Type}
+				for name, property := range detail.AdditionalProperties {
+					value[name] = property
+				}
+				server.AuthorizationDetails = append(server.AuthorizationDetails, value)
 			}
 			for _, scope := range item.Scopes {
 				description := ""

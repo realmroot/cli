@@ -133,6 +133,12 @@ func (a *App) resolveContext(service *agent.Service, server catalog.ResourceServ
 				return selected, nil
 			}
 		}
+		if len(details) == 0 {
+			if err := service.ClearContext(server.ResourceURL); err != nil {
+				return nil, err
+			}
+			return disconnectedAuthorizationDetails(server), nil
+		}
 		return nil, fmt.Errorf("the selected %s Context is no longer available; run `realmroot toolbox %s context`", server.CommandName, server.CommandName)
 	}
 	if !errors.Is(err, os.ErrNotExist) {
@@ -140,12 +146,19 @@ func (a *App) resolveContext(service *agent.Service, server catalog.ResourceServ
 	}
 	switch len(details) {
 	case 0:
-		return nil, nil
+		return disconnectedAuthorizationDetails(server), nil
 	case 1:
 		return []map[string]any{details[0].AuthorizationDetail}, nil
 	default:
 		return nil, fmt.Errorf("Resource Server %q has multiple Contexts; select one with `realmroot toolbox %s context use <name>` or pass --context <name>", server.CommandName, server.CommandName)
 	}
+}
+
+func disconnectedAuthorizationDetails(server catalog.ResourceServer) []map[string]any {
+	if server.ConnectionStatus != "not_connected" {
+		return nil
+	}
+	return server.AuthorizationDetails
 }
 
 func namedContext(details []catalog.AuthorizationDetail, name string) (catalog.AuthorizationDetail, error) {
