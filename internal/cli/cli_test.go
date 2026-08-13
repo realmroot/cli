@@ -375,7 +375,9 @@ type recordingOperationCredentialResolver struct {
 	binding      agent.CredentialBinding
 	err          error
 	resource     string
+	details      []map[string]any
 	alternatives [][]string
+	contextAware bool
 }
 
 func (r *recordingOperationCredentialResolver) BindingForScopeAlternatives(resource string, alternatives [][]string) (agent.CredentialBinding, error) {
@@ -384,8 +386,12 @@ func (r *recordingOperationCredentialResolver) BindingForScopeAlternatives(resou
 	return r.binding, r.err
 }
 
-func (r *recordingOperationCredentialResolver) BindingForAuthorizationContextScopeAlternatives(resource string, _ []map[string]any, alternatives [][]string) (agent.CredentialBinding, error) {
-	return r.BindingForScopeAlternatives(resource, alternatives)
+func (r *recordingOperationCredentialResolver) BindingForAuthorizationContextScopeAlternatives(resource string, details []map[string]any, alternatives [][]string) (agent.CredentialBinding, error) {
+	r.resource = resource
+	r.details = details
+	r.alternatives = alternatives
+	r.contextAware = true
+	return r.binding, r.err
 }
 
 func TestResolveOperationCredentialBindingSelectsExistingOfferForOperation(t *testing.T) {
@@ -406,8 +412,8 @@ func TestResolveOperationCredentialBindingSelectsExistingOfferForOperation(t *te
 		t.Fatal(err)
 	}
 	if binding == nil || binding.Reference != "selected-reference" || resolver.resource != server.ResourceURL ||
-		len(resolver.alternatives) != 2 || strings.Join(resolver.alternatives[0], " ") != "issues:read" {
-		t.Fatalf("binding = %#v, resource = %q, alternatives = %#v", binding, resolver.resource, resolver.alternatives)
+		!resolver.contextAware || len(resolver.details) != 0 || len(resolver.alternatives) != 2 || strings.Join(resolver.alternatives[0], " ") != "issues:read" {
+		t.Fatalf("binding = %#v, resource = %q, details = %#v, alternatives = %#v", binding, resolver.resource, resolver.details, resolver.alternatives)
 	}
 }
 

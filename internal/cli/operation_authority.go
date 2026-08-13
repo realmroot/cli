@@ -29,8 +29,6 @@ func resolveOperationCredentialBinding(
 	if !selected || !invocationRequiresAuthority(args) || !operationRequiresAuthority(operation) {
 		return nil, nil
 	}
-	var binding agent.CredentialBinding
-	var err error
 	alternatives := operationCredentialScopeAlternatives(operation)
 	if requestedScope != "" {
 		matched := false
@@ -45,15 +43,9 @@ func resolveOperationCredentialBinding(
 		}
 		alternatives = [][]string{{requestedScope}}
 	}
-	if len(authorizationDetails) > 0 {
-		binding, err = resolver.BindingForAuthorizationContextScopeAlternatives(
-			server.ResourceURL, authorizationDetails, alternatives,
-		)
-	} else {
-		binding, err = resolver.BindingForScopeAlternatives(
-			server.ResourceURL, alternatives,
-		)
-	}
+	binding, err := resolver.BindingForAuthorizationContextScopeAlternatives(
+		server.ResourceURL, authorizationDetails, alternatives,
+	)
 	if err == nil {
 		return &binding, nil
 	}

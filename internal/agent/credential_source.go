@@ -134,23 +134,30 @@ func handleCredentialSource(
 		if err != nil {
 			return credentialSourceOutput{}, err
 		}
-		offer := reference.credential
-		token, err := issueTargetCredential(
-			ctx, client, states, reference, offer, input.Proof,
-		)
-		if err != nil {
+		proofTarget := reference.credential.ProofTarget
+		var token targetTokenResponse
+		for {
+			token, err = issueTargetCredential(ctx, client, states, reference, reference.credential, input.Proof)
+			if err == nil {
+				break
+			}
 			var challenge *dpopNonceChallenge
 			if errors.As(err, &challenge) {
 				return credentialSourceOutput{Challenge: &credentialSourceChallenge{
 					Type: "dpop-nonce", Nonce: challenge.nonce,
 				}}, nil
 			}
-			if terminalCredentialPermissionError(err) {
-				if removeErr := states.RemoveCredentialOffer(reference); removeErr != nil {
-					return credentialSourceOutput{}, fmt.Errorf("remove invalid Resource credential offer: %w", removeErr)
-				}
+			if !terminalCredentialPermissionError(err) {
+				return credentialSourceOutput{}, err
 			}
-			return credentialSourceOutput{}, err
+			if removeErr := states.RemoveCredentialOffer(reference); removeErr != nil {
+				return credentialSourceOutput{}, fmt.Errorf("remove invalid Resource credential offer: %w", removeErr)
+			}
+			next, findErr := states.FindCredentialOffer(input.Reference, runtime, input.Scopes)
+			if findErr != nil || next.credential.ProofTarget != proofTarget {
+				return credentialSourceOutput{}, err
+			}
+			reference = next
 		}
 		return credentialSourceOutput{Credential: &credentialSourceCredential{
 			AccessToken: token.AccessToken,
