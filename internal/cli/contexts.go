@@ -37,7 +37,7 @@ type contextResult struct {
 
 type contextSelectionResult struct {
 	ResourceServer string `json:"resourceServer"`
-	Context        string `json:"context"`
+	Context        string `json:"context,omitempty"`
 	Current        bool   `json:"current"`
 }
 
@@ -71,6 +71,17 @@ func (a *App) contextCommand(ctx context.Context, service *agent.Service, client
 	if err != nil {
 		return err
 	}
+	if len(args) == 1 && args[0] == "clear" {
+		if err := service.ClearContext(server.ResourceURL); err != nil {
+			return err
+		}
+		result := contextSelectionResult{ResourceServer: server.CommandName, Current: false}
+		if a.json {
+			return a.printJSON(result)
+		}
+		fmt.Fprintf(a.stdout, "Cleared the current Context for %s.\n", result.ResourceServer)
+		return nil
+	}
 	details, err := client.AuthorizationDetails(ctx, server)
 	if err != nil {
 		return err
@@ -83,7 +94,7 @@ func (a *App) contextCommand(ctx context.Context, service *agent.Service, client
 		return a.printContexts(contextResult{ResourceServer: server.CommandName, Contexts: listContexts(details, selected)})
 	}
 	if len(args) != 2 || (args[0] != "show" && args[0] != "use") {
-		return fmt.Errorf("usage: realmroot toolbox %s context [show|use] <name>", server.CommandName)
+		return fmt.Errorf("usage: realmroot toolbox %s context [show|use] <name> | clear", server.CommandName)
 	}
 	detail, err := namedContext(details, args[1])
 	if err != nil {

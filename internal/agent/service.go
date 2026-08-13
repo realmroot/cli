@@ -275,7 +275,11 @@ func (s *Service) StoreContext(resourceIndicator string, details []map[string]an
 	if contexts.Items == nil {
 		contexts.Items = make(map[string][]map[string]any)
 	}
-	contexts.Items[resourceIndicator] = cloneAuthorizationDetails(details)
+	if len(details) == 0 {
+		delete(contexts.Items, resourceIndicator)
+	} else {
+		contexts.Items[resourceIndicator] = cloneAuthorizationDetails(details)
+	}
 	data, err := json.MarshalIndent(contexts, "", "  ")
 	if err != nil {
 		return err
@@ -305,6 +309,10 @@ func (s *Service) StoreContext(resourceIndicator string, details []map[string]an
 		return err
 	}
 	return os.Rename(temporaryPath, path)
+}
+
+func (s *Service) ClearContext(resourceIndicator string) error {
+	return s.StoreContext(resourceIndicator, nil)
 }
 
 func (s *Service) BindingForResource(resourceIndicator string) (CredentialBinding, error) {

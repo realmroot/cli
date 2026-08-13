@@ -23,6 +23,7 @@ func resolveOperationCredentialBinding(
 	inspection restish.APIInspection,
 	args []string,
 	authorizationDetails []map[string]any,
+	requestedScope string,
 ) (*agent.CredentialBinding, error) {
 	operation, selected := selectedOperation(inspection.Operations, args)
 	if !selected || !invocationRequiresAuthority(args) || !operationRequiresAuthority(operation) {
@@ -30,13 +31,27 @@ func resolveOperationCredentialBinding(
 	}
 	var binding agent.CredentialBinding
 	var err error
+	alternatives := operationCredentialScopeAlternatives(operation)
+	if requestedScope != "" {
+		matched := false
+		for _, alternative := range alternatives {
+			if len(alternative) == 1 && alternative[0] == requestedScope {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return nil, fmt.Errorf("operation %q does not publish the requested authority scope %q", strings.Join(operation.Command, " "), requestedScope)
+		}
+		alternatives = [][]string{{requestedScope}}
+	}
 	if len(authorizationDetails) > 0 {
 		binding, err = resolver.BindingForAuthorizationContextScopeAlternatives(
-			server.ResourceURL, authorizationDetails, operationCredentialScopeAlternatives(operation),
+			server.ResourceURL, authorizationDetails, alternatives,
 		)
 	} else {
 		binding, err = resolver.BindingForScopeAlternatives(
-			server.ResourceURL, operationCredentialScopeAlternatives(operation),
+			server.ResourceURL, alternatives,
 		)
 	}
 	if err == nil {

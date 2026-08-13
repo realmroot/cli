@@ -14,7 +14,7 @@ var toolboxCommands = []CommandHelp{
 var resourceServerCommands = []CommandHelp{
 	{Name: "context", Usage: "<resource-server> context", Description: "list available Contexts"},
 	{Name: "context", Usage: "<resource-server> context show <name>", Description: "show one Context"},
-	{Name: "context", Usage: "<resource-server> context use <name>", Description: "select the default Context"},
+	{Name: "context", Usage: "<resource-server> context [use <name>|clear]", Description: "select or clear the default Context"},
 }
 
 var genericHTTPMethods = []string{"get", "head", "post", "put", "patch", "delete"}

@@ -117,7 +117,7 @@ func TestToolboxHelpDocumentsLocalCommandSurface(t *testing.T) {
 		"get|head|post|put|patch|delete <target>",
 		"<resource-server> context",
 		"<resource-server> context show <name>",
-		"<resource-server> context use <name>",
+		"<resource-server> context [use <name>|clear]",
 	} {
 		if !strings.Contains(output, expected) {
 			t.Fatalf("help omitted %q:\n%s", expected, output)
@@ -303,6 +303,14 @@ func TestParseToolboxFlagsPreservesOperationScopeFlag(t *testing.T) {
 	}
 }
 
+func TestParseToolboxFlagsAcceptsAuthorityScopeBeforeOperation(t *testing.T) {
+	app := &App{}
+	args, err := app.parseToolboxFlags([]string{"linear", "--scope", "issues:create", "execute-linear-graphql-request", "{}"})
+	if err != nil || app.scope != "issues:create" || strings.Join(args, " ") != "linear execute-linear-graphql-request {}" {
+		t.Fatalf("args=%v authorityScope=%q err=%v", args, app.scope, err)
+	}
+}
+
 func TestParseToolboxFlagsRejectsEmptyDiscoveryQuery(t *testing.T) {
 	app := &App{}
 	if _, err := app.parseToolboxFlags([]string{"cloudflare", "--search", "  "}); err == nil {
@@ -392,6 +400,7 @@ func TestResolveOperationCredentialBindingSelectsExistingOfferForOperation(t *te
 		githubOperationInspection(),
 		[]string{"issues", "issues-get"},
 		nil,
+		"",
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -399,6 +408,41 @@ func TestResolveOperationCredentialBindingSelectsExistingOfferForOperation(t *te
 	if binding == nil || binding.Reference != "selected-reference" || resolver.resource != server.ResourceURL ||
 		len(resolver.alternatives) != 2 || strings.Join(resolver.alternatives[0], " ") != "issues:read" {
 		t.Fatalf("binding = %#v, resource = %q, alternatives = %#v", binding, resolver.resource, resolver.alternatives)
+	}
+}
+
+func TestResolveOperationCredentialBindingSelectsRequestedPublishedScope(t *testing.T) {
+	resolver := &recordingOperationCredentialResolver{binding: agent.CredentialBinding{
+		Reference: "selected-reference", Scopes: []string{"metadata:read"},
+	}}
+	binding, err := resolveOperationCredentialBinding(
+		resolver,
+		catalog.ResourceServer{CommandName: "github", ResourceURL: "https://api.example.com/github"},
+		githubOperationInspection(),
+		[]string{"issues", "issues-get"},
+		nil,
+		"metadata:read",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if binding == nil || len(resolver.alternatives) != 1 || strings.Join(resolver.alternatives[0], " ") != "metadata:read" {
+		t.Fatalf("binding = %#v, alternatives = %#v", binding, resolver.alternatives)
+	}
+}
+
+func TestResolveOperationCredentialBindingRejectsUnpublishedRequestedScope(t *testing.T) {
+	resolver := &recordingOperationCredentialResolver{}
+	_, err := resolveOperationCredentialBinding(
+		resolver,
+		catalog.ResourceServer{CommandName: "github", ResourceURL: "https://api.example.com/github"},
+		githubOperationInspection(),
+		[]string{"issues", "issues-get"},
+		nil,
+		"issues:write",
+	)
+	if err == nil || !strings.Contains(err.Error(), "does not publish") {
+		t.Fatalf("error = %v", err)
 	}
 }
 
@@ -410,6 +454,7 @@ func TestResolveOperationCredentialBindingDoesNotResolveHelp(t *testing.T) {
 		githubOperationInspection(),
 		[]string{"issues", "issues-get", "--help"},
 		nil,
+		"",
 	)
 	if err != nil || binding != nil || resolver.resource != "" {
 		t.Fatalf("binding = %#v, resource = %q, error = %v", binding, resolver.resource, err)
@@ -424,6 +469,7 @@ func TestResolveOperationCredentialBindingReportsMissingExistingOffer(t *testing
 		githubOperationInspection(),
 		[]string{"issues", "issues-get"},
 		nil,
+		"",
 	)
 	if err == nil || !strings.Contains(err.Error(), "no approved Agent authority") || !strings.Contains(err.Error(), "issues:read") {
 		t.Fatalf("error = %v", err)
