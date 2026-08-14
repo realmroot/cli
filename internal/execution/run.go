@@ -5,15 +5,18 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/realmroot/toolbox/internal/agent"
 	"github.com/realmroot/toolbox/internal/catalog"
+	"github.com/realmroot/toolbox/internal/observability"
 )
 
 type Runner struct {
@@ -22,6 +25,7 @@ type Runner struct {
 	stdin   io.Reader
 	stdout  io.Writer
 	stderr  io.Writer
+	logger  *slog.Logger
 }
 
 type RunOptions struct {
@@ -31,11 +35,16 @@ type RunOptions struct {
 	RequestAuthority          func(context.Context, []string) error
 }
 
-func NewRunner(service *agent.Service, client *http.Client, stdin io.Reader, stdout, stderr io.Writer) *Runner {
-	return &Runner{service: service, client: client, stdin: stdin, stdout: stdout, stderr: stderr}
+func NewRunner(service *agent.Service, client *http.Client, stdin io.Reader, stdout, stderr io.Writer, loggers ...*slog.Logger) *Runner {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	if len(loggers) == 1 {
+		logger = loggers[0]
+	}
+	return &Runner{service: service, client: client, stdin: stdin, stdout: stdout, stderr: stderr, logger: logger}
 }
 
 func (r *Runner) Run(ctx context.Context, server catalog.ResourceServer, integrations []catalog.ToolIntegration, command []string, options RunOptions) error {
+	startedAt := time.Now()
 	if len(command) == 0 {
 		return errors.New("native command is required after --")
 	}
@@ -43,6 +52,8 @@ func (r *Runner) Run(ctx context.Context, server catalog.ResourceServer, integra
 	if err != nil {
 		return err
 	}
+	observability.LogDuration(r.logger, observability.LevelTrace, "native_command.resolve", startedAt, "integration", integration.ID, "executable", filepath.Base(executable))
+	phaseStartedAt := time.Now()
 	var binding agent.CredentialBinding
 	if options.ExactAuthorizationContext {
 		binding, err = r.service.BindingForAuthorizationContextEffectiveScopes(
@@ -56,6 +67,7 @@ func (r *Runner) Run(ctx context.Context, server catalog.ResourceServer, integra
 	if err != nil {
 		return fmt.Errorf("load selected %s Context authority: %w; inspect Contexts with `realmroot toolbox %s context` or request access with `realmroot agent request`", server.CommandName, err, server.CommandName)
 	}
+	observability.LogDuration(r.logger, observability.LevelTrace, "authority.resolve", phaseStartedAt, "scope_count", len(binding.Scopes))
 	binding.Scopes = intersectScopes(binding.Scopes, options.EffectiveScopes)
 	broker, err := NewBroker(
 		server.ResourceURL,
@@ -86,6 +98,7 @@ func (r *Runner) Run(ctx context.Context, server catalog.ResourceServer, integra
 		return err
 	}
 	defer broker.Close()
+	phaseStartedAt = time.Now()
 	environment := cleanEnvironment(os.Environ(), providerCredentialNames(integration.ID))
 	switch integration.Protocol {
 	case "cloudflare-api-base":
@@ -135,9 +148,16 @@ func (r *Runner) Run(ctx context.Context, server catalog.ResourceServer, integra
 	default:
 		return fmt.Errorf("Resource Server integration %q uses unsupported protocol %q", integration.ID, integration.Protocol)
 	}
+	observability.LogDuration(r.logger, observability.LevelTrace, "broker.start", phaseStartedAt, "protocol", integration.Protocol)
 	child := exec.CommandContext(ctx, executable, command[1:]...)
 	child.Stdin, child.Stdout, child.Stderr, child.Env = r.stdin, r.stdout, r.stderr, environment
+	phaseStartedAt = time.Now()
 	err = child.Run()
+	result := "ok"
+	if err != nil {
+		result = "error"
+	}
+	observability.LogDuration(r.logger, slog.LevelDebug, "child.execute", phaseStartedAt, "executable", filepath.Base(executable), "result", result)
 	if err == nil {
 		return nil
 	}

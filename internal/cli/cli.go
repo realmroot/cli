@@ -19,6 +19,7 @@ import (
 	"github.com/realmroot/toolbox/internal/buildinfo"
 	"github.com/realmroot/toolbox/internal/catalog"
 	"github.com/realmroot/toolbox/internal/execution"
+	"github.com/realmroot/toolbox/internal/observability"
 	restish "github.com/saltbo/restish/v2"
 	"github.com/spf13/cobra"
 )
@@ -33,6 +34,7 @@ type App struct {
 	scope     string
 	all       bool
 	context   string
+	logLevel  string
 }
 
 func New(stdout, stderr io.Writer) *cobra.Command {
@@ -45,8 +47,13 @@ func New(stdout, stderr io.Writer) *cobra.Command {
 	}
 	root.SetOut(stdout)
 	root.SetErr(stderr)
+	root.PersistentPreRunE = func(_ *cobra.Command, _ []string) error {
+		_, err := observability.ParseLevel(app.logLevel)
+		return err
+	}
 	root.PersistentFlags().StringVar(&app.origin, "realmroot-origin", environment("REALMROOT_ORIGIN", agent.DefaultOrigin), "Realmroot deployment origin")
 	root.PersistentFlags().BoolVar(&app.json, "json", false, "print Toolbox and Agent results as JSON")
+	root.PersistentFlags().StringVar(&app.logLevel, "log-level", environment("REALMROOT_LOG_LEVEL", "warn"), "diagnostic log level: trace, debug, info, warn, or error")
 	root.AddCommand(app.agentCommand(), app.toolboxCommand(), app.execCommand(), app.versionCommand())
 	return root
 }
@@ -89,15 +96,26 @@ func (a *App) execCommand() *cobra.Command {
 		DisableFlagParsing: true,
 		Args:               cobra.ArbitraryArgs,
 		RunE: func(command *cobra.Command, args []string) error {
+			startedAt := time.Now()
 			args, options, err := a.parseExecFlags(args)
 			if err != nil {
 				return err
 			}
+			observabilityConfig, err := observability.New(a.stderr, a.logLevel)
+			if err != nil {
+				return err
+			}
+			logger := observabilityConfig.Logger.With("operation", "exec")
+			result := "ok"
+			defer func() {
+				logger.Info("command.complete", "result", result, "duration_ms", time.Since(startedAt).Milliseconds())
+			}()
 			if len(args) == 1 && (args[0] == "--help" || args[0] == "-h") {
 				return command.Help()
 			}
-			service, catalogClient, httpClient, err := a.services()
+			service, catalogClient, httpClient, err := a.services(observabilityConfig)
 			if err != nil {
+				result = "error"
 				return err
 			}
 			if len(args) == 0 {
@@ -107,17 +125,23 @@ func (a *App) execCommand() *cobra.Command {
 				return a.listNativeTools(command.Context(), catalogClient)
 			}
 			resourceServer := args[0]
+			phaseStartedAt := time.Now()
 			server, err := catalogClient.Find(command.Context(), resourceServer)
 			if err != nil {
+				result = "error"
 				return err
 			}
+			observability.LogDuration(logger, observability.LevelTrace, "resource_server.resolve", phaseStartedAt, "resource_server", server.CommandName)
+			phaseStartedAt = time.Now()
 			integrations, err := catalogClient.ToolIntegrations(command.Context(), server)
 			if err != nil {
 				if len(args) == 1 && errors.Is(err, catalog.ErrNoToolIntegrations) {
 					return a.printNativeToolSummary(nativeToolSummary{ResourceServer: server.CommandName})
 				}
+				result = "error"
 				return err
 			}
+			observability.LogDuration(logger, observability.LevelTrace, "native_integrations.discover", phaseStartedAt, "resource_server", server.CommandName)
 			if len(args) == 1 || (len(args) == 2 && (args[1] == "--help" || args[1] == "-h")) {
 				if options.active() {
 					return errors.New("--context requires a native command")
@@ -134,10 +158,13 @@ func (a *App) execCommand() *cobra.Command {
 			if len(args) == 0 {
 				return errors.New("native command is required after --")
 			}
+			phaseStartedAt = time.Now()
 			details, err := catalogClient.AuthorizationDetails(command.Context(), server)
 			if err != nil {
+				result = "error"
 				return err
 			}
+			observability.LogDuration(logger, observability.LevelTrace, "authorization_context.discover", phaseStartedAt, "resource_server", server.CommandName)
 			selected, err := a.resolveContext(service, server, details, options.context)
 			if err != nil {
 				return err
@@ -146,8 +173,8 @@ func (a *App) execCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			runner := execution.NewRunner(service, httpClient, command.InOrStdin(), a.stdout, a.stderr)
-			return runner.Run(command.Context(), server, integrations, args, execution.RunOptions{
+			runner := execution.NewRunner(service, httpClient, command.InOrStdin(), a.stdout, a.stderr, logger)
+			err = runner.Run(command.Context(), server, integrations, args, execution.RunOptions{
 				AuthorizationDetails:      selected,
 				ExactAuthorizationContext: true,
 				EffectiveScopes:           executionScopes(details, selected, server.Scopes),
@@ -156,6 +183,10 @@ func (a *App) execCommand() *cobra.Command {
 					return err
 				},
 			})
+			if err != nil {
+				result = "error"
+			}
+			return err
 		},
 	}
 	command.Flags().String("context", "", "Resource Server Context name for this command")
@@ -186,6 +217,14 @@ func (a *App) parseExecFlags(args []string) ([]string, execOptions, error) {
 			a.origin = args[index]
 		case strings.HasPrefix(argument, "--realmroot-origin="):
 			a.origin = strings.TrimPrefix(argument, "--realmroot-origin=")
+		case argument == "--log-level":
+			if index+1 >= len(args) {
+				return nil, execOptions{}, errors.New("--log-level requires a value")
+			}
+			index++
+			a.logLevel = args[index]
+		case strings.HasPrefix(argument, "--log-level="):
+			a.logLevel = strings.TrimPrefix(argument, "--log-level=")
 		case argument == "--context":
 			if index+1 >= len(args) {
 				return nil, execOptions{}, errors.New("--context requires a value")
@@ -1002,8 +1041,19 @@ func (a *App) newRestishRuntimeWithCommandSurface(service *agent.Service, config
 	return runtime, nil
 }
 
-func (a *App) services() (*agent.Service, *catalog.Client, *http.Client, error) {
-	httpClient := &http.Client{Timeout: 30 * time.Second}
+func (a *App) services(configs ...observability.Config) (*agent.Service, *catalog.Client, *http.Client, error) {
+	var transport http.RoundTripper = http.DefaultTransport
+	if len(configs) == 0 {
+		config, err := observability.New(a.stderr, a.logLevel)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		configs = []observability.Config{config}
+	}
+	if len(configs) == 1 {
+		transport = observability.Transport{Base: transport, Logger: configs[0].Logger, TraceID: configs[0].TraceID}
+	}
+	httpClient := &http.Client{Timeout: 30 * time.Second, Transport: transport}
 	service, err := agent.NewService(a.origin, httpClient)
 	if err != nil {
 		return nil, nil, nil, err

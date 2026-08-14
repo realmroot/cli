@@ -213,6 +213,17 @@ func TestExecutionBindingStartsWithOneApprovedAuthoritySet(t *testing.T) {
 	if len(readBinding.Scopes) != 1 || readBinding.Scopes[0] != "metadata:read" {
 		t.Fatalf("challenged execution binding = %#v", readBinding)
 	}
+	learnedBinding, err := service.BindingForAuthorizationContextEffectiveScopes(
+		resource,
+		details,
+		[]string{"contents:write", "metadata:read"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(learnedBinding.Scopes) != 1 || learnedBinding.Scopes[0] != "metadata:read" {
+		t.Fatalf("learned execution binding = %#v", learnedBinding)
+	}
 }
 
 func TestEffectiveContextBindingSkipsOffersWithRevokedScopes(t *testing.T) {
