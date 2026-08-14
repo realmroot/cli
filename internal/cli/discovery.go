@@ -144,6 +144,40 @@ func summarizeResourceServer(server catalog.ResourceServer) resourceServerSummar
 	}
 }
 
+func effectivePublishedScopes(scopes []string, published []catalog.Scope) []string {
+	available := make(map[string]bool, len(published))
+	for _, scope := range published {
+		available[scope.Value] = true
+	}
+	result := make([]string, 0, len(scopes))
+	for _, scope := range scopes {
+		if available[scope] {
+			result = append(result, scope)
+		}
+	}
+	sort.Strings(result)
+	return result
+}
+
+func contextAccountScopes(detail catalog.AuthorizationDetail, published []catalog.Scope) []string {
+	scopes := append(append([]string(nil), detail.AuthorizedScopes...), detail.RequestableScopes...)
+	return effectivePublishedScopes(scopes, published)
+}
+
+func executionScopes(details []catalog.AuthorizationDetail, selected []map[string]any, published []catalog.Scope) []string {
+	for _, detail := range details {
+		if sameDetails(detail.AuthorizationDetail, selected) {
+			return contextAccountScopes(detail, published)
+		}
+	}
+	result := make([]string, 0, len(published))
+	for _, scope := range published {
+		result = append(result, scope.Value)
+	}
+	sort.Strings(result)
+	return result
+}
+
 func buildResourceServerOverview(server catalog.ResourceServer, details []catalog.AuthorizationDetail, operations []restish.OperationInspection, options discoveryOptions) resourceServerOverview {
 	overview := resourceServerOverview{
 		ResourceServer: summarizeResourceServer(server), ScopeCount: len(server.Scopes),

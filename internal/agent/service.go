@@ -479,6 +479,46 @@ func (s *Service) BindingForAuthorizationContextAllAuthority(resourceIndicator s
 	return CredentialBinding{}, os.ErrNotExist
 }
 
+func (s *Service) BindingForAuthorizationContextEffectiveScopes(resourceIndicator string, details []map[string]any, allowed []string) (CredentialBinding, error) {
+	sources, err := s.credentialSourcesForResource(resourceIndicator)
+	if err != nil {
+		return CredentialBinding{}, err
+	}
+	allowedSet := make(map[string]bool, len(allowed))
+	for _, scope := range allowed {
+		allowedSet[scope] = true
+	}
+	for _, source := range sources {
+		if !sameAuthorizationDetails(source.source.AuthorizationDetails, details) {
+			continue
+		}
+		var selected []string
+		for _, offer := range source.source.Offers {
+			candidate := normalizedBindingScopes(offer.Scopes)
+			if len(candidate) == 0 || !allScopesAllowed(candidate, allowedSet) {
+				continue
+			}
+			if selected == nil || len(candidate) < len(selected) || (len(candidate) == len(selected) && strings.Join(candidate, "\x00") < strings.Join(selected, "\x00")) {
+				selected = candidate
+			}
+		}
+		if selected == nil {
+			return CredentialBinding{}, os.ErrNotExist
+		}
+		return CredentialBinding{Reference: source.reference, Scopes: selected}, nil
+	}
+	return CredentialBinding{}, os.ErrNotExist
+}
+
+func allScopesAllowed(scopes []string, allowed map[string]bool) bool {
+	for _, scope := range scopes {
+		if !allowed[scope] {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *Service) BindingForAuthorizationContextScopeAlternatives(resourceIndicator string, details []map[string]any, alternatives [][]string) (CredentialBinding, error) {
 	sources, err := s.credentialSourcesForResource(resourceIndicator)
 	if err != nil {

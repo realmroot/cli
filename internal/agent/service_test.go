@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -211,6 +212,26 @@ func TestExecutionBindingStartsWithOneApprovedAuthoritySet(t *testing.T) {
 	}
 	if len(readBinding.Scopes) != 1 || readBinding.Scopes[0] != "metadata:read" {
 		t.Fatalf("challenged execution binding = %#v", readBinding)
+	}
+}
+
+func TestEffectiveContextBindingSkipsOffersWithRevokedScopes(t *testing.T) {
+	service, resource := serviceWithCredentialSources(t, map[string]credentialSource{
+		testCredentialSourceReference: sourceWithScopes(
+			t,
+			"workspace-1",
+			[]string{"administration:write"},
+			[]string{"contents:write"},
+		),
+	})
+	details := []map[string]any{{"type": "workspace", "identifier": "workspace-1"}}
+
+	binding, err := service.BindingForAuthorizationContextEffectiveScopes(resource, details, []string{"contents:write"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if binding.Reference != testCredentialSourceReference || !slices.Equal(binding.Scopes, []string{"contents:write"}) {
+		t.Fatalf("effective binding = %#v", binding)
 	}
 }
 

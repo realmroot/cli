@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -145,6 +146,7 @@ func (a *App) execCommand() *cobra.Command {
 			return runner.Run(command.Context(), server, integrations, args, execution.RunOptions{
 				AuthorizationDetails:      selected,
 				ExactAuthorizationContext: true,
+				EffectiveScopes:           executionScopes(details, selected, server.Scopes),
 			})
 		},
 	}
@@ -599,6 +601,32 @@ func (a *App) showResourceServer(ctx context.Context, service *agent.Service, cl
 			}
 		}
 	}
+	effectiveSelected := selected
+	var effectiveDetail *catalog.AuthorizationDetail
+	if a.context != "" {
+		detail, detailErr := namedContext(details, a.context)
+		if detailErr != nil {
+			return detailErr
+		}
+		effectiveSelected = []map[string]any{detail.AuthorizationDetail}
+		effectiveDetail = &detail
+	} else {
+		for index := range details {
+			if sameDetails(details[index].AuthorizationDetail, effectiveSelected) {
+				effectiveDetail = &details[index]
+				break
+			}
+		}
+		if effectiveDetail == nil && len(details) == 1 {
+			effectiveSelected = []map[string]any{details[0].AuthorizationDetail}
+			effectiveDetail = &details[0]
+		}
+	}
+	if effectiveDetail != nil {
+		overview.ResourceServer.ConnectedAccountScopes = contextAccountScopes(*effectiveDetail, server.Scopes)
+	} else {
+		overview.ResourceServer.ConnectedAccountScopes = effectivePublishedScopes(server.ConnectionScopes, server.Scopes)
+	}
 	integrations, integrationsErr := client.ToolIntegrations(ctx, server)
 	if integrationsErr == nil {
 		overview.NativeCommands = execution.NativeCommands(integrations)
@@ -624,17 +652,25 @@ func (a *App) showResourceServer(ctx context.Context, service *agent.Service, cl
 	}
 	var binding agent.CredentialBinding
 	var bindErr error
-	if len(selected) > 0 {
-		binding, bindErr = service.BindingForAuthorizationContextAllAuthority(server.ResourceURL, selected)
-	} else if len(details) == 1 {
-		binding, bindErr = service.BindingForAuthorizationContextAllAuthority(server.ResourceURL, []map[string]any{details[0].AuthorizationDetail})
+	if len(effectiveSelected) > 0 {
+		binding, bindErr = service.BindingForAuthorizationContextAllAuthority(server.ResourceURL, effectiveSelected)
 	} else if len(server.AuthorizationDetails) == 0 {
 		binding, bindErr = service.BindingForAuthorizationContextAllAuthority(server.ResourceURL, nil)
 	} else {
 		binding, bindErr = service.BindingForResource(server.ResourceURL)
 	}
 	if bindErr == nil {
-		overview.ResourceServer.AgentAuthorityScopes = append([]string(nil), binding.Scopes...)
+		overview.ResourceServer.AgentAuthorityScopes = effectivePublishedScopes(binding.Scopes, server.Scopes)
+		if effectiveDetail != nil {
+			accountScopes := make(map[string]bool)
+			for _, scope := range contextAccountScopes(*effectiveDetail, server.Scopes) {
+				accountScopes[scope] = true
+			}
+			overview.ResourceServer.AgentAuthorityScopes = slices.DeleteFunc(
+				overview.ResourceServer.AgentAuthorityScopes,
+				func(scope string) bool { return !accountScopes[scope] },
+			)
+		}
 	} else if !errors.Is(bindErr, os.ErrNotExist) {
 		return fmt.Errorf("load Agent authority for %s: %w", server.CommandName, bindErr)
 	}

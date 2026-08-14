@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -658,6 +659,31 @@ func TestResourceServerSummariesDoNotIncludePublishedScopes(t *testing.T) {
 	output := string(encoded)
 	if strings.Contains(output, `"scopes"`) || strings.Contains(output, `"id"`) || strings.Contains(output, `"available"`) || !strings.Contains(output, `"scopeCount":2`) || !strings.Contains(output, `"connectedAccountScopes":["zone.read"]`) {
 		t.Fatalf("summary JSON = %s", output)
+	}
+}
+
+func TestEffectiveAuthorityDropsUnpublishedAndContextRevokedScopes(t *testing.T) {
+	published := []catalog.Scope{{Value: "metadata:read"}, {Value: "contents:write"}}
+	detail := catalog.AuthorizationDetail{
+		AuthorizedScopes:  []string{"administration:write", "contents:write"},
+		RequestableScopes: []string{"metadata:read"},
+	}
+
+	if got := contextAccountScopes(detail, published); !slices.Equal(got, []string{"contents:write", "metadata:read"}) {
+		t.Fatalf("context account scopes = %v", got)
+	}
+	if got := effectivePublishedScopes([]string{"administration:write", "metadata:read"}, published); !slices.Equal(got, []string{"metadata:read"}) {
+		t.Fatalf("effective authority scopes = %v", got)
+	}
+	if got := executionScopes(
+		[]catalog.AuthorizationDetail{{
+			AuthorizationDetail: map[string]any{"type": "github_installation", "installation_id": "7"},
+			AuthorizedScopes:    []string{"administration:write", "contents:write"},
+		}},
+		[]map[string]any{{"type": "github_installation", "installation_id": "7"}},
+		published,
+	); !slices.Equal(got, []string{"contents:write"}) {
+		t.Fatalf("execution scopes = %v", got)
 	}
 }
 

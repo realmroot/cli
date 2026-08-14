@@ -27,6 +27,7 @@ type Runner struct {
 type RunOptions struct {
 	AuthorizationDetails      []map[string]any
 	ExactAuthorizationContext bool
+	EffectiveScopes           []string
 }
 
 func NewRunner(service *agent.Service, client *http.Client, stdin io.Reader, stdout, stderr io.Writer) *Runner {
@@ -43,13 +44,18 @@ func (r *Runner) Run(ctx context.Context, server catalog.ResourceServer, integra
 	}
 	var binding agent.CredentialBinding
 	if options.ExactAuthorizationContext {
-		binding, _, err = r.service.BindingForAuthorizationContext(server.ResourceURL, options.AuthorizationDetails)
+		binding, err = r.service.BindingForAuthorizationContextEffectiveScopes(
+			server.ResourceURL,
+			options.AuthorizationDetails,
+			options.EffectiveScopes,
+		)
 	} else {
 		binding, err = r.service.ExecutionBinding(server.ResourceURL, options.AuthorizationDetails)
 	}
 	if err != nil {
 		return fmt.Errorf("load selected %s Context authority: %w; inspect Contexts with `realmroot toolbox %s context` or request access with `realmroot agent request`", server.CommandName, err, server.CommandName)
 	}
+	binding.Scopes = intersectScopes(binding.Scopes, options.EffectiveScopes)
 	broker, err := NewBroker(
 		server.ResourceURL,
 		binding.Reference,
@@ -57,7 +63,7 @@ func (r *Runner) Run(ctx context.Context, server catalog.ResourceServer, integra
 		r.service.CredentialSource(),
 		func(reference string, alternatives [][]string) ([]string, error) {
 			resolved, err := r.service.BindingForReferenceScopeAlternatives(server.ResourceURL, reference, alternatives)
-			return resolved.Scopes, err
+			return intersectScopes(resolved.Scopes, options.EffectiveScopes), err
 		},
 		r.client,
 	)
@@ -128,6 +134,20 @@ func (r *Runner) Run(ctx context.Context, server catalog.ResourceServer, integra
 		}
 	}
 	return err
+}
+
+func intersectScopes(scopes, allowed []string) []string {
+	available := make(map[string]bool, len(allowed))
+	for _, scope := range allowed {
+		available[scope] = true
+	}
+	result := make([]string, 0, len(scopes))
+	for _, scope := range scopes {
+		if available[scope] {
+			result = append(result, scope)
+		}
+	}
+	return result
 }
 
 type ExitError struct {
