@@ -9,7 +9,7 @@ Users install one command and do not need a separate plugin or runtime.
 Homebrew installs a prebuilt macOS binary and does not require Go:
 
 ```console
-brew install --cask saltbo/tap/realmroot
+brew install --cask realmroot/tap/realmroot
 ```
 
 Prebuilt archives for macOS, Linux, and Windows are available from
