@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 
@@ -67,6 +68,37 @@ func selectedResourceServer(servers []catalog.ResourceServer, args []string) (ca
 	return catalog.ResourceServer{}, false
 }
 
+func selectedGenericResourceServer(servers []catalog.ResourceServer, args []string) (catalog.ResourceServer, bool) {
+	if len(args) < 2 || !genericHTTPMethod(args[0]) {
+		return catalog.ResourceServer{}, false
+	}
+	target, err := url.Parse(args[1])
+	if err != nil || target.Scheme == "" || target.Host == "" {
+		return catalog.ResourceServer{}, false
+	}
+	var selected catalog.ResourceServer
+	selectedPathLength := -1
+	for _, server := range servers {
+		resource, parseErr := url.Parse(server.ResourceURL)
+		if parseErr != nil || !strings.EqualFold(resource.Scheme, target.Scheme) || !strings.EqualFold(resource.Host, target.Host) || !urlPathContains(resource.Path, target.Path) {
+			continue
+		}
+		if len(resource.Path) > selectedPathLength {
+			selected = server
+			selectedPathLength = len(resource.Path)
+		}
+	}
+	return selected, selectedPathLength >= 0
+}
+
+func urlPathContains(basePath, targetPath string) bool {
+	base := strings.TrimSuffix(basePath, "/")
+	if base == "" {
+		return true
+	}
+	return targetPath == base || strings.HasPrefix(targetPath, base+"/")
+}
+
 func prepareOperationCredentials(
 	config *restish.Config,
 	server catalog.ResourceServer,
@@ -87,6 +119,16 @@ func prepareOperationCredentials(
 	if binding == nil {
 		return nil
 	}
+	return bindProfileCredentials(config, server, inspection, profileName, *binding)
+}
+
+func bindProfileCredentials(
+	config *restish.Config,
+	server catalog.ResourceServer,
+	inspection restish.APIInspection,
+	profileName string,
+	binding agent.CredentialBinding,
+) error {
 	api := config.APIs[server.CommandName]
 	if api == nil {
 		return fmt.Errorf("Resource Server %q is not configured", server.CommandName)

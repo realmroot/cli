@@ -853,6 +853,39 @@ func (a *App) runRestish(ctx context.Context, service *agent.Service, client *ca
 		if err != nil {
 			return err
 		}
+	} else if server, ok := selectedGenericResourceServer(servers, args); ok {
+		profile := "default"
+		inspection, inspectErr := runtime.InspectAPI(ctx, server.CommandName, profile)
+		if inspectErr != nil {
+			return inspectErr
+		}
+		details, detailsErr := client.AuthorizationDetails(ctx, server)
+		if detailsErr != nil {
+			return detailsErr
+		}
+		selected, contextErr := a.resolveContext(service, server, details, a.context)
+		if contextErr != nil {
+			return contextErr
+		}
+		var binding agent.CredentialBinding
+		if a.scope != "" {
+			binding, err = service.BindingForAuthorizationContextScopeAlternatives(server.ResourceURL, selected, [][]string{{a.scope}})
+		} else {
+			binding, err = service.BindingForAuthorizationContextAllAuthority(server.ResourceURL, selected)
+		}
+		if errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("Resource Server %q has no approved Agent authority for this request; request task-appropriate access with `realmroot agent request --resource-server %s --scope <scope>`", server.CommandName, server.CommandName)
+		}
+		if err != nil {
+			return fmt.Errorf("select Agent authority for Resource Server %q: %w", server.CommandName, err)
+		}
+		if err := bindProfileCredentials(config, server, inspection, profile, binding); err != nil {
+			return err
+		}
+		runtime, err = a.newRestishRuntime(service, config)
+		if err != nil {
+			return err
+		}
 	}
 	argvArgs := append([]string(nil), args...)
 	if !hasRuntimeFlag(argvArgs, "--rsh-print") {

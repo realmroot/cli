@@ -377,6 +377,44 @@ func TestPrepareOperationCredentialsReplacesStaleProfileReference(t *testing.T) 
 	}
 }
 
+func TestSelectedGenericResourceServerUsesMostSpecificURL(t *testing.T) {
+	// [spec: cli/generic-resource-operation]
+	servers := []catalog.ResourceServer{
+		{CommandName: "root", ResourceURL: "https://api.example.com"},
+		{CommandName: "platform", ResourceURL: "https://api.example.com/api"},
+		{CommandName: "other", ResourceURL: "https://other.example.com/api"},
+	}
+	server, ok := selectedGenericResourceServer(servers, []string{"get", "https://api.example.com/api/resource-servers?limit=10"})
+	if !ok || server.CommandName != "platform" {
+		t.Fatalf("selected server = %#v, found = %t", server, ok)
+	}
+}
+
+func TestSelectedGenericResourceServerRejectsSiblingAndUnknownURLs(t *testing.T) {
+	servers := []catalog.ResourceServer{{CommandName: "platform", ResourceURL: "https://api.example.com/api"}}
+	for _, target := range []string{
+		"https://api.example.com/apiv2/resource-servers",
+		"https://other.example.com/api/resource-servers",
+		"not-a-url",
+	} {
+		if server, ok := selectedGenericResourceServer(servers, []string{"get", target}); ok {
+			t.Fatalf("target %q selected %#v", target, server)
+		}
+	}
+}
+
+func TestBindProfileCredentialsSupportsGenericHTTPRequests(t *testing.T) {
+	config := &restish.Config{APIs: map[string]*restish.APIConfig{"platform": {}}}
+	binding := agent.CredentialBinding{Reference: "selected-reference", Scopes: []string{"resource-servers:read"}}
+	if err := bindProfileCredentials(config, catalog.ResourceServer{CommandName: "platform"}, githubOperationInspection(), "default", binding); err != nil {
+		t.Fatal(err)
+	}
+	credential := config.APIs["platform"].Profiles["default"].Credentials["realmrootOidc"]
+	if credential == nil || credential.Auth == nil || credential.Auth.Params["reference"] != binding.Reference || strings.Join(credential.Satisfies, " ") != "resource-servers:read" {
+		t.Fatalf("credential = %#v", credential)
+	}
+}
+
 func TestOperationScopeAlternativesPreserveOAuthAlternatives(t *testing.T) {
 	operation := githubOperationInspection().Operations[0]
 	if got := operationCredentialScopeAlternatives(operation); len(got) != 2 || strings.Join(got[0], " ") != "issues:read" || strings.Join(got[1], " ") != "metadata:read" {
