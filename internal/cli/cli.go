@@ -228,7 +228,7 @@ func (a *App) requestCommand() *cobra.Command {
 	var scopes []string
 	var contextName string
 	var reason string
-	var noWait bool
+	var handoff bool
 	command := &cobra.Command{
 		Use:   "request",
 		Short: "Request exact task-scoped authority from a Resource Server",
@@ -259,7 +259,7 @@ func (a *App) requestCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			receipt, err := accessService.Request(ctx, server, scopes, details, reason, access.RequestOptions{Wait: !noWait})
+			receipt, err := accessService.Request(ctx, server, scopes, details, reason, access.RequestOptions{Handoff: handoff})
 			if err != nil {
 				return err
 			}
@@ -270,7 +270,7 @@ func (a *App) requestCommand() *cobra.Command {
 	command.Flags().StringArrayVar(&scopes, "scope", nil, "exact published scope to request (repeatable)")
 	command.Flags().StringVar(&contextName, "context", "", "Resource Server Context name for this request")
 	command.Flags().StringVar(&reason, "reason", "", "controller-facing reason for the request")
-	command.Flags().BoolVar(&noWait, "no-wait", false, "return the approval URL without opening a browser or polling")
+	command.Flags().BoolVar(&handoff, "handoff", false, "hand the approval URL to a remote controller without opening a browser or waiting")
 	return command
 }
 

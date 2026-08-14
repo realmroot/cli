@@ -30,7 +30,7 @@ func TestRequestSkipsConnectionForNativeResource(t *testing.T) {
 	service := &Service{api: client}
 	_, err := service.Request(context.Background(), catalog.ResourceServer{
 		ID: "resource-1", ConnectionStatus: "not_required",
-	}, []string{"agents:read"}, nil, "Read Agent status", RequestOptions{Wait: true})
+	}, []string{"agents:read"}, nil, "Read Agent status", RequestOptions{})
 	if !errors.Is(err, errAccessRequested) {
 		t.Fatalf("Request() error = %v, want access request", err)
 	}
@@ -50,7 +50,7 @@ func TestRequestUsesOneAccessRequestForEveryConnectionState(t *testing.T) {
 			service := &Service{api: client}
 			_, err := service.Request(context.Background(), catalog.ResourceServer{
 				ID: "resource-1", ConnectionStatus: status,
-			}, []string{"contents:write"}, nil, "Update repository content", RequestOptions{Wait: true})
+			}, []string{"contents:write"}, nil, "Update repository content", RequestOptions{})
 			if !errors.Is(err, errAccessRequested) {
 				t.Fatalf("Request() error = %v, want access request", err)
 			}
@@ -79,14 +79,15 @@ func (*pendingClient) CreateAgentAuthorizationRequestWithResponse(context.Contex
 }
 
 func (*pendingClient) GetAgentAuthorizationRequestWithResponse(context.Context, string, ...realmrootapi.RequestEditorFn) (*realmrootapi.GetAgentAuthorizationRequestResponse, error) {
-	panic("no-wait request must not poll")
+	panic("handoff request must not poll")
 }
 
-func TestRequestNoWaitReturnsApprovalLinkWithoutOpeningOrPolling(t *testing.T) {
+func TestRequestHandoffReturnsApprovalLinkWithoutOpeningOrPolling(t *testing.T) {
+	// [spec: cli/task-scoped-access-handoff]
 	service := &Service{api: &pendingClient{}}
 	receipt, err := service.Request(context.Background(), catalog.ResourceServer{
 		ID: "resource-1", CommandName: "github", ConnectionStatus: "not_connected",
-	}, []string{"issues:read"}, nil, "Read issues", RequestOptions{Wait: false})
+	}, []string{"issues:read"}, nil, "Read issues", RequestOptions{Handoff: true})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -98,6 +98,23 @@ func TestAgentCommandRejectsUnsupportedSubcommands(t *testing.T) {
 	}
 }
 
+func TestAgentRequestHelpUsesControllerHandoffVocabulary(t *testing.T) {
+	// [spec: cli/task-scoped-access-handoff]
+	var stdout, stderr bytes.Buffer
+	command := New(&stdout, &stderr)
+	command.SetArgs([]string{"agent", "request", "--help"})
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	output := stdout.String()
+	if !strings.Contains(output, "--handoff") || !strings.Contains(output, "remote controller") {
+		t.Fatalf("request help omitted handoff behavior:\n%s", output)
+	}
+	if strings.Contains(output, "--no-wait") {
+		t.Fatalf("request help retained misleading flag:\n%s", output)
+	}
+}
+
 func TestToolboxHelpDoesNotCallRealmroot(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	command := New(&stdout, &stderr)

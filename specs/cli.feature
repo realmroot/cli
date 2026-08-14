@@ -91,7 +91,7 @@ Feature: Realmroot Toolbox command line
   @journey:task-scoped-access-handoff @entrypoint:agent-request
   Scenario: Hand an approval link to a remote controller
     Given the controller is not using the Agent's computer
-    When the Agent runs "realmroot agent request --no-wait" with the Resource Server and scopes
+    When the Agent runs "realmroot agent request --handoff" with the Resource Server and scopes
     Then Toolbox does not open a browser or poll the request
     And it immediately returns the pending status and approval URL
     And the same URL continues through account connection, Context selection, and Permission approval

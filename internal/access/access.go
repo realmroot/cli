@@ -23,7 +23,7 @@ type Receipt struct {
 }
 
 type RequestOptions struct {
-	Wait bool
+	Handoff bool
 }
 
 type Service struct {
@@ -77,7 +77,7 @@ func (s *Service) Request(ctx context.Context, server catalog.ResourceServer, sc
 	approvalURL := response.JSON201.Interaction.Url
 	expiresAt := response.JSON201.Interaction.ExpiresAt
 	if status == "pending" && approvalURL != "" {
-		if !options.Wait {
+		if options.Handoff {
 			return Receipt{Status: "pending", ResourceServer: server.CommandName, Scopes: scopes, ApprovalURL: approvalURL}, nil
 		}
 		if err := s.agent.OpenApproval(approvalURL); err != nil {
