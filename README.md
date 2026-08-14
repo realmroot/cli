@@ -6,10 +6,10 @@ Users install one command and do not need a separate plugin or runtime.
 
 ## Install
 
-Homebrew installs a prebuilt macOS binary and does not require Go:
+Homebrew installs a prebuilt macOS or Linux binary and does not require Go:
 
 ```console
-brew install --cask realmroot/tap/realmroot
+brew install realmroot/tap/realmroot
 ```
 
 Prebuilt archives for macOS, Linux, and Windows are available from
