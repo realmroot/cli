@@ -106,15 +106,15 @@ Feature: Realmroot Toolbox command line
     But embedded engine profiles, credential bindings, and setup commands are never exposed
 
   @journey:generic-resource-operation @entrypoint:toolbox-http
-  Scenario: Invoke a registered Resource Server by URL
+  Scenario: Invoke a registered Resource Server by name
     Given one or more approved credential offers are stored for the Resource Server
-    When the Agent invokes a generic HTTP method with a URL under that Resource Server
-    Then Toolbox matches the most specific registered Resource Server URL
+    When the Agent invokes a generic HTTP method with the Resource Server name and operation path
+    Then Toolbox resolves the name to the registered Resource Server URL
     And it matches the HTTP method and path to the most specific published operation
     And it uses the selected Context and automatically chooses the least approved authority that covers the operation
     And execution does not accept a Toolbox scope override
     But an unpublished path under a registered Resource Server is rejected
-    But a URL outside every registered Resource Server remains an unauthenticated request
+    But an absolute URL outside every registered Resource Server remains an unauthenticated request
 
   @journey:native-resource-tool @entrypoint:exec
   Scenario: Run a native tool with approved Agent authority

@@ -67,6 +67,12 @@ func selectedGenericResourceServer(servers []catalog.ResourceServer, args []stri
 	if len(args) < 2 || !genericHTTPMethod(args[0]) {
 		return catalog.ResourceServer{}, false
 	}
+	name := strings.SplitN(args[1], "/", 2)[0]
+	for _, server := range servers {
+		if server.CommandName == name {
+			return server, true
+		}
+	}
 	target, err := url.Parse(args[1])
 	if err != nil || target.Scheme == "" || target.Host == "" {
 		return catalog.ResourceServer{}, false
@@ -94,12 +100,12 @@ func urlPathContains(basePath, targetPath string) bool {
 	return targetPath == base || strings.HasPrefix(targetPath, base+"/")
 }
 
-func selectedGenericOperation(api *restish.APIConfig, operations []restish.OperationInspection, args []string, profileName string) (restish.OperationInspection, bool) {
+func selectedGenericOperation(api *restish.APIConfig, resourceServer string, operations []restish.OperationInspection, args []string, profileName string) (restish.OperationInspection, bool) {
 	if api == nil || len(args) < 2 || !genericHTTPMethod(args[0]) {
 		return restish.OperationInspection{}, false
 	}
-	target, err := url.Parse(args[1])
-	if err != nil || !target.IsAbs() {
+	target, ok := genericRequestURL(api, resourceServer, args[1], profileName)
+	if !ok {
 		return restish.OperationInspection{}, false
 	}
 	targetPath := target.EscapedPath()
@@ -131,6 +137,33 @@ func selectedGenericOperation(api *restish.APIConfig, operations []restish.Opera
 		ambiguous = false
 	}
 	return selected, bestScore >= 0 && !ambiguous
+}
+
+func genericRequestURL(api *restish.APIConfig, resourceServer, target string, profileName string) (*url.URL, bool) {
+	parsed, err := url.Parse(target)
+	if err != nil {
+		return nil, false
+	}
+	if parsed.IsAbs() {
+		return parsed, true
+	}
+	if parsed.Path != resourceServer && !strings.HasPrefix(parsed.Path, resourceServer+"/") {
+		return nil, false
+	}
+	baseURL := api.BaseURL
+	if profile := api.Profiles[profileName]; profile != nil && profile.BaseURL != "" {
+		baseURL = profile.BaseURL
+	}
+	base, err := url.Parse(baseURL)
+	if err != nil || !base.IsAbs() {
+		return nil, false
+	}
+	relativePath := strings.TrimPrefix(parsed.Path, resourceServer)
+	base.Path = strings.TrimRight(base.Path, "/") + "/" + strings.TrimLeft(relativePath, "/")
+	base.RawPath = ""
+	base.RawQuery = parsed.RawQuery
+	base.Fragment = ""
+	return base, true
 }
 
 func genericOperationRoutePath(api *restish.APIConfig, profileName, operationPath string) (string, bool) {

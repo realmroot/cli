@@ -144,7 +144,7 @@ func TestToolboxHelpDocumentsLocalCommandSurface(t *testing.T) {
 	for _, expected := range []string{
 		"platform [operation...]",
 		"sync <resource-server>",
-		"get|head|post|put|patch|delete <target>",
+		"get|head|post|put|patch|delete <resource-server>/<path>",
 		"<resource-server> context",
 		"<resource-server> context show <name>",
 		"<resource-server> context [use <name>|clear]",
@@ -414,6 +414,17 @@ func TestSelectedGenericResourceServerUsesMostSpecificURL(t *testing.T) {
 	}
 }
 
+func TestSelectedGenericResourceServerUsesToolboxName(t *testing.T) {
+	servers := []catalog.ResourceServer{
+		{CommandName: "platform", ResourceURL: "https://api.example.com/api"},
+		{CommandName: "github", ResourceURL: "https://api.example.com/github"},
+	}
+	server, ok := selectedGenericResourceServer(servers, []string{"get", "platform/resource-servers?limit=10"})
+	if !ok || server.CommandName != "platform" {
+		t.Fatalf("selected server = %#v, found = %t", server, ok)
+	}
+}
+
 func TestSelectedGenericResourceServerRejectsSiblingAndUnknownURLs(t *testing.T) {
 	servers := []catalog.ResourceServer{{CommandName: "platform", ResourceURL: "https://api.example.com/api"}}
 	for _, target := range []string{
@@ -435,11 +446,11 @@ func TestSelectedGenericOperationMatchesMethodAndMostSpecificPath(t *testing.T) 
 		{ID: "specific", Method: "GET", Path: "/repos/toolbox"},
 		{ID: "wrong-method", Method: "POST", Path: "/repos/toolbox"},
 	}
-	operation, ok := selectedGenericOperation(api, operations, []string{"get", "https://api.example.com/api/repos/toolbox?view=compact"}, "default")
+	operation, ok := selectedGenericOperation(api, "github", operations, []string{"get", "github/repos/toolbox?view=compact"}, "default")
 	if !ok || operation.ID != "specific" {
 		t.Fatalf("operation = %#v, found = %t", operation, ok)
 	}
-	operation, ok = selectedGenericOperation(api, operations, []string{"get", "https://api.example.com/api/repos/another"}, "default")
+	operation, ok = selectedGenericOperation(api, "github", operations, []string{"get", "github/repos/another"}, "default")
 	if !ok || operation.ID != "templated" {
 		t.Fatalf("templated operation = %#v, found = %t", operation, ok)
 	}
@@ -447,14 +458,14 @@ func TestSelectedGenericOperationMatchesMethodAndMostSpecificPath(t *testing.T) 
 
 func TestSelectedGenericOperationRejectsUnpublishedAndAmbiguousPaths(t *testing.T) {
 	api := &restish.APIConfig{BaseURL: "https://api.example.com/api"}
-	if operation, ok := selectedGenericOperation(api, []restish.OperationInspection{{ID: "known", Method: "GET", Path: "/known"}}, []string{"get", "https://api.example.com/api/unknown"}, "default"); ok {
+	if operation, ok := selectedGenericOperation(api, "platform", []restish.OperationInspection{{ID: "known", Method: "GET", Path: "/known"}}, []string{"get", "platform/unknown"}, "default"); ok {
 		t.Fatalf("unpublished path selected %#v", operation)
 	}
 	ambiguous := []restish.OperationInspection{
 		{ID: "first", Method: "GET", Path: "/repos/{owner}"},
 		{ID: "second", Method: "GET", Path: "/repos/{name}"},
 	}
-	if operation, ok := selectedGenericOperation(api, ambiguous, []string{"get", "https://api.example.com/api/repos/realmroot"}, "default"); ok {
+	if operation, ok := selectedGenericOperation(api, "github", ambiguous, []string{"get", "github/repos/realmroot"}, "default"); ok {
 		t.Fatalf("ambiguous path selected %#v", operation)
 	}
 }
@@ -463,6 +474,7 @@ func TestSelectedGenericOperationUsesConfiguredOperationBase(t *testing.T) {
 	api := &restish.APIConfig{BaseURL: "https://drive.example/openapi", OperationBase: "/api"}
 	operation, ok := selectedGenericOperation(
 		api,
+		"zpan",
 		[]restish.OperationInspection{{ID: "list-objects", Method: "GET", Path: "/objects"}},
 		[]string{"get", "https://drive.example/api/objects"},
 		"default",

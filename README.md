@@ -33,7 +33,7 @@ realmroot toolbox cloudflare --all
 realmroot toolbox github repos repos-get --help
 realmroot toolbox github repos repos-get saltbo restish
 realmroot toolbox platform agents list-agents --limit 1 --no-paginate
-realmroot toolbox get https://example.com/status
+realmroot toolbox get platform/resource-servers
 realmroot toolbox agent-wallet wallet show --json
 realmroot exec
 realmroot exec github
@@ -93,6 +93,12 @@ accept `--context <name>` as a one-command override without changing the
 default. `exec` uses all already-approved authority in that Context so opaque
 native protocols such as GraphQL work without exposing scope-selection or
 credential-selection internals. It never requests or expands authority.
+
+Generic HTTP operations address registered Resource Servers by Toolbox name,
+for example `realmroot toolbox get github/repos/realmroot/cli`. Toolbox resolves
+the deployment URL and selects operation authority without exposing either to
+the caller. Absolute URLs remain available only for unregistered public HTTP
+targets.
 
 `platform` and `sync` are reserved Toolbox command names. `platform` always maps to the Resource Server whose published
 identifier is `realmroot`. Resource Server names also cannot collide with the

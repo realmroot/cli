@@ -862,7 +862,7 @@ func (a *App) runRestish(ctx context.Context, service *agent.Service, client *ca
 		if inspectErr != nil {
 			return inspectErr
 		}
-		operation, operationSelected := selectedGenericOperation(config.APIs[server.CommandName], inspection.Operations, args, profile)
+		operation, operationSelected := selectedGenericOperation(config.APIs[server.CommandName], server.CommandName, inspection.Operations, args, profile)
 		if !operationSelected {
 			return fmt.Errorf("%s %s does not match one published operation for Resource Server %q", strings.ToUpper(args[0]), args[1], server.CommandName)
 		}
@@ -987,7 +987,7 @@ func toolboxHelp() string {
 	for _, command := range catalog.ToolboxCommands() {
 		fmt.Fprintf(&help, "  %-43s %s\n", command.Usage, command.Description)
 	}
-	fmt.Fprintf(&help, "  %-43s %s\n", strings.Join(catalog.GenericHTTPMethods(), "|")+" <target>", "send a generic HTTP request")
+	fmt.Fprintf(&help, "  %-43s %s\n", strings.Join(catalog.GenericHTTPMethods(), "|")+" <resource-server>/<path>", "call a published Resource Server operation by name")
 	for _, command := range catalog.ResourceServerCommands() {
 		fmt.Fprintf(&help, "  %-43s %s\n", command.Usage, command.Description)
 	}
