@@ -290,6 +290,9 @@ func (a *App) toolboxCommand() *cobra.Command {
 			if len(args) == 1 && (args[0] == "--help" || args[0] == "-h") {
 				return command.Help()
 			}
+			if a.scope != "" && len(args) > 1 {
+				return errors.New("--scope filters a Resource Server overview; operation authority is selected automatically")
+			}
 			ctx, cancel := context.WithTimeout(command.Context(), 15*time.Minute)
 			defer cancel()
 			agentService, catalogClient, _, err := a.services()
@@ -328,7 +331,7 @@ func (a *App) toolboxCommand() *cobra.Command {
 	command.Flags().String("timeout", "", "request timeout, such as 30s")
 	command.Flags().Bool("include", false, "include response headers")
 	command.Flags().String("search", "", "find operations by command, summary, method, path, or operation ID")
-	command.Flags().String("scope", "", "filter an overview or select an exact published scope for an operation")
+	command.Flags().String("scope", "", "filter a Resource Server overview by published scope")
 	command.Flags().String("context", "", "Resource Server Context name for this operation")
 	command.Flags().Bool("all", false, "show the complete Resource Server inventory")
 	command.Flags().Bool("no-browser", false, "do not open controller approval pages")
@@ -842,7 +845,7 @@ func (a *App) runRestish(ctx context.Context, service *agent.Service, client *ca
 				return err
 			}
 		}
-		binding, bindingErr := resolveOperationCredentialBinding(service, server, inspection, args[1:], selected, a.scope)
+		binding, bindingErr := resolveOperationCredentialBinding(service, server, inspection, args[1:], selected)
 		if bindingErr != nil {
 			return bindingErr
 		}
@@ -859,32 +862,30 @@ func (a *App) runRestish(ctx context.Context, service *agent.Service, client *ca
 		if inspectErr != nil {
 			return inspectErr
 		}
-		details, detailsErr := client.AuthorizationDetails(ctx, server)
-		if detailsErr != nil {
-			return detailsErr
+		operation, operationSelected := selectedGenericOperation(config.APIs[server.CommandName], inspection.Operations, args, profile)
+		if !operationSelected {
+			return fmt.Errorf("%s %s does not match one published operation for Resource Server %q", strings.ToUpper(args[0]), args[1], server.CommandName)
 		}
-		selected, contextErr := a.resolveContext(service, server, details, a.context)
-		if contextErr != nil {
-			return contextErr
-		}
-		var binding agent.CredentialBinding
-		if a.scope != "" {
-			binding, err = service.BindingForAuthorizationContextScopeAlternatives(server.ResourceURL, selected, [][]string{{a.scope}})
-		} else {
-			binding, err = service.BindingForAuthorizationContextAllAuthority(server.ResourceURL, selected)
-		}
-		if errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("Resource Server %q has no approved Agent authority for this request; request task-appropriate access with `realmroot agent request --resource-server %s --scope <scope>`", server.CommandName, server.CommandName)
-		}
-		if err != nil {
-			return fmt.Errorf("select Agent authority for Resource Server %q: %w", server.CommandName, err)
-		}
-		if err := bindProfileCredentials(config, server, inspection, profile, binding); err != nil {
-			return err
-		}
-		runtime, err = a.newRestishRuntime(service, config)
-		if err != nil {
-			return err
+		if operationRequiresAuthority(operation) {
+			details, detailsErr := client.AuthorizationDetails(ctx, server)
+			if detailsErr != nil {
+				return detailsErr
+			}
+			selected, contextErr := a.resolveContext(service, server, details, a.context)
+			if contextErr != nil {
+				return contextErr
+			}
+			binding, bindingErr := resolveCredentialBindingForOperation(service, server, operation, selected)
+			if bindingErr != nil {
+				return bindingErr
+			}
+			if err := bindProfileCredentials(config, server, inspection, profile, *binding); err != nil {
+				return err
+			}
+			runtime, err = a.newRestishRuntime(service, config)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	argvArgs := append([]string(nil), args...)

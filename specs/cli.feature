@@ -110,8 +110,10 @@ Feature: Realmroot Toolbox command line
     Given one or more approved credential offers are stored for the Resource Server
     When the Agent invokes a generic HTTP method with a URL under that Resource Server
     Then Toolbox matches the most specific registered Resource Server URL
-    And it uses the selected Context and its approved Agent authority for the request
-    And "--scope" can narrow the request to one approved scope
+    And it matches the HTTP method and path to the most specific published operation
+    And it uses the selected Context and automatically chooses the least approved authority that covers the operation
+    And execution does not accept a Toolbox scope override
+    But an unpublished path under a registered Resource Server is rejected
     But a URL outside every registered Resource Server remains an unauthenticated request
 
   @journey:native-resource-tool @entrypoint:exec

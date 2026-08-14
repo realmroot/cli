@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	urlpath "path"
 	"strings"
 
 	"github.com/realmroot/toolbox/internal/agent"
@@ -14,7 +15,6 @@ import (
 )
 
 type operationCredentialResolver interface {
-	BindingForScopeAlternatives(string, [][]string) (agent.CredentialBinding, error)
 	BindingForAuthorizationContextScopeAlternatives(string, []map[string]any, [][]string) (agent.CredentialBinding, error)
 }
 
@@ -24,26 +24,21 @@ func resolveOperationCredentialBinding(
 	inspection restish.APIInspection,
 	args []string,
 	authorizationDetails []map[string]any,
-	requestedScope string,
 ) (*agent.CredentialBinding, error) {
 	operation, selected := selectedOperation(inspection.Operations, args)
 	if !selected || !invocationRequiresAuthority(args) || !operationRequiresAuthority(operation) {
 		return nil, nil
 	}
+	return resolveCredentialBindingForOperation(resolver, server, operation, authorizationDetails)
+}
+
+func resolveCredentialBindingForOperation(
+	resolver operationCredentialResolver,
+	server catalog.ResourceServer,
+	operation restish.OperationInspection,
+	authorizationDetails []map[string]any,
+) (*agent.CredentialBinding, error) {
 	alternatives := operationCredentialScopeAlternatives(operation)
-	if requestedScope != "" {
-		matched := false
-		for _, alternative := range alternatives {
-			if len(alternative) == 1 && alternative[0] == requestedScope {
-				matched = true
-				break
-			}
-		}
-		if !matched {
-			return nil, fmt.Errorf("operation %q does not publish the requested authority scope %q", strings.Join(operation.Command, " "), requestedScope)
-		}
-		alternatives = [][]string{{requestedScope}}
-	}
 	binding, err := resolver.BindingForAuthorizationContextScopeAlternatives(
 		server.ResourceURL, authorizationDetails, alternatives,
 	)
@@ -97,6 +92,121 @@ func urlPathContains(basePath, targetPath string) bool {
 		return true
 	}
 	return targetPath == base || strings.HasPrefix(targetPath, base+"/")
+}
+
+func selectedGenericOperation(api *restish.APIConfig, operations []restish.OperationInspection, args []string, profileName string) (restish.OperationInspection, bool) {
+	if api == nil || len(args) < 2 || !genericHTTPMethod(args[0]) {
+		return restish.OperationInspection{}, false
+	}
+	target, err := url.Parse(args[1])
+	if err != nil || !target.IsAbs() {
+		return restish.OperationInspection{}, false
+	}
+	targetPath := target.EscapedPath()
+	if targetPath == "" {
+		targetPath = "/"
+	}
+	method := strings.ToUpper(args[0])
+	bestScore := -1
+	ambiguous := false
+	var selected restish.OperationInspection
+	for _, operation := range operations {
+		if !strings.EqualFold(operation.Method, method) {
+			continue
+		}
+		routePath, ok := genericOperationRoutePath(api, profileName, operation.Path)
+		if !ok {
+			continue
+		}
+		score, matches := routeTemplateMatchScore(routePath, targetPath)
+		if !matches || score < bestScore {
+			continue
+		}
+		if score == bestScore {
+			ambiguous = true
+			continue
+		}
+		selected = operation
+		bestScore = score
+		ambiguous = false
+	}
+	return selected, bestScore >= 0 && !ambiguous
+}
+
+func genericOperationRoutePath(api *restish.APIConfig, profileName, operationPath string) (string, bool) {
+	baseURL := api.BaseURL
+	operationBase := api.OperationBase
+	if profile := api.Profiles[profileName]; profile != nil {
+		if profile.BaseURL != "" {
+			baseURL = profile.BaseURL
+		}
+		if profile.OperationBase != "" {
+			operationBase = profile.OperationBase
+		}
+	}
+	routeBase := baseURL
+	if operationBase != "" {
+		resolved, err := restishconfig.ResolveOperationBaseURL(baseURL, operationBase)
+		if err != nil {
+			return "", false
+		}
+		routeBase = resolved
+	}
+	route, err := url.Parse(strings.TrimRight(routeBase, "/") + operationPath)
+	if err != nil || !route.IsAbs() {
+		return "", false
+	}
+	return urlpath.Clean(route.Path), true
+}
+
+func routeTemplateMatchScore(templatePath, requestPath string) (int, bool) {
+	templateSegments := splitCleanPath(templatePath)
+	requestSegments := splitCleanPath(requestPath)
+	if len(templateSegments) != len(requestSegments) {
+		return 0, false
+	}
+	score := 0
+	for index, templateSegment := range templateSegments {
+		requestSegment := requestSegments[index]
+		if strings.Contains(templateSegment, "{") && strings.Contains(templateSegment, "}") {
+			if requestSegment == "" {
+				return 0, false
+			}
+			score += literalTemplateChars(templateSegment)
+			continue
+		}
+		if templateSegment != requestSegment {
+			return 0, false
+		}
+		score += len(templateSegment) * 4
+	}
+	return score, true
+}
+
+func splitCleanPath(value string) []string {
+	value = strings.Trim(urlpath.Clean(value), "/")
+	if value == "" || value == "." {
+		return nil
+	}
+	return strings.Split(value, "/")
+}
+
+func literalTemplateChars(segment string) int {
+	score := 0
+	inTemplate := false
+	for _, character := range segment {
+		switch character {
+		case '{':
+			inTemplate = true
+		case '}':
+			inTemplate = false
+		default:
+			if !inTemplate {
+				score++
+			}
+		}
+	}
+	return score
 }
 
 func prepareOperationCredentials(

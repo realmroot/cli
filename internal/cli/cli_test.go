@@ -333,11 +333,18 @@ func TestParseToolboxFlagsPreservesOperationScopeFlag(t *testing.T) {
 	}
 }
 
-func TestParseToolboxFlagsAcceptsAuthorityScopeBeforeOperation(t *testing.T) {
-	app := &App{}
-	args, err := app.parseToolboxFlags([]string{"linear", "--scope", "issues:create", "execute-linear-graphql-request", "{}"})
-	if err != nil || app.scope != "issues:create" || strings.Join(args, " ") != "linear execute-linear-graphql-request {}" {
-		t.Fatalf("args=%v authorityScope=%q err=%v", args, app.scope, err)
+func TestToolboxRejectsScopeOverridesForOperations(t *testing.T) {
+	for _, args := range [][]string{
+		{"toolbox", "linear", "--scope", "issues:create", "execute-linear-graphql-request", "{}"},
+		{"toolbox", "get", "--scope", "resource-servers:read", "https://id.example/api/resource-servers"},
+	} {
+		var stdout, stderr bytes.Buffer
+		command := New(&stdout, &stderr)
+		command.SetArgs(args)
+		err := command.Execute()
+		if err == nil || !strings.Contains(err.Error(), "operation authority is selected automatically") {
+			t.Fatalf("args=%v error=%v", args, err)
+		}
 	}
 }
 
@@ -420,6 +427,51 @@ func TestSelectedGenericResourceServerRejectsSiblingAndUnknownURLs(t *testing.T)
 	}
 }
 
+func TestSelectedGenericOperationMatchesMethodAndMostSpecificPath(t *testing.T) {
+	// [spec: cli/generic-resource-operation]
+	api := &restish.APIConfig{BaseURL: "https://api.example.com/api"}
+	operations := []restish.OperationInspection{
+		{ID: "templated", Method: "GET", Path: "/repos/{repo}"},
+		{ID: "specific", Method: "GET", Path: "/repos/toolbox"},
+		{ID: "wrong-method", Method: "POST", Path: "/repos/toolbox"},
+	}
+	operation, ok := selectedGenericOperation(api, operations, []string{"get", "https://api.example.com/api/repos/toolbox?view=compact"}, "default")
+	if !ok || operation.ID != "specific" {
+		t.Fatalf("operation = %#v, found = %t", operation, ok)
+	}
+	operation, ok = selectedGenericOperation(api, operations, []string{"get", "https://api.example.com/api/repos/another"}, "default")
+	if !ok || operation.ID != "templated" {
+		t.Fatalf("templated operation = %#v, found = %t", operation, ok)
+	}
+}
+
+func TestSelectedGenericOperationRejectsUnpublishedAndAmbiguousPaths(t *testing.T) {
+	api := &restish.APIConfig{BaseURL: "https://api.example.com/api"}
+	if operation, ok := selectedGenericOperation(api, []restish.OperationInspection{{ID: "known", Method: "GET", Path: "/known"}}, []string{"get", "https://api.example.com/api/unknown"}, "default"); ok {
+		t.Fatalf("unpublished path selected %#v", operation)
+	}
+	ambiguous := []restish.OperationInspection{
+		{ID: "first", Method: "GET", Path: "/repos/{owner}"},
+		{ID: "second", Method: "GET", Path: "/repos/{name}"},
+	}
+	if operation, ok := selectedGenericOperation(api, ambiguous, []string{"get", "https://api.example.com/api/repos/realmroot"}, "default"); ok {
+		t.Fatalf("ambiguous path selected %#v", operation)
+	}
+}
+
+func TestSelectedGenericOperationUsesConfiguredOperationBase(t *testing.T) {
+	api := &restish.APIConfig{BaseURL: "https://drive.example/openapi", OperationBase: "/api"}
+	operation, ok := selectedGenericOperation(
+		api,
+		[]restish.OperationInspection{{ID: "list-objects", Method: "GET", Path: "/objects"}},
+		[]string{"get", "https://drive.example/api/objects"},
+		"default",
+	)
+	if !ok || operation.ID != "list-objects" {
+		t.Fatalf("operation = %#v, found = %t", operation, ok)
+	}
+}
+
 func TestBindProfileCredentialsSupportsGenericHTTPRequests(t *testing.T) {
 	config := &restish.Config{APIs: map[string]*restish.APIConfig{"platform": {}}}
 	binding := agent.CredentialBinding{Reference: "selected-reference", Scopes: []string{"resource-servers:read"}}
@@ -448,12 +500,6 @@ type recordingOperationCredentialResolver struct {
 	contextAware bool
 }
 
-func (r *recordingOperationCredentialResolver) BindingForScopeAlternatives(resource string, alternatives [][]string) (agent.CredentialBinding, error) {
-	r.resource = resource
-	r.alternatives = alternatives
-	return r.binding, r.err
-}
-
 func (r *recordingOperationCredentialResolver) BindingForAuthorizationContextScopeAlternatives(resource string, details []map[string]any, alternatives [][]string) (agent.CredentialBinding, error) {
 	r.resource = resource
 	r.details = details
@@ -474,7 +520,6 @@ func TestResolveOperationCredentialBindingSelectsExistingOfferForOperation(t *te
 		githubOperationInspection(),
 		[]string{"issues", "issues-get"},
 		nil,
-		"",
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -482,41 +527,6 @@ func TestResolveOperationCredentialBindingSelectsExistingOfferForOperation(t *te
 	if binding == nil || binding.Reference != "selected-reference" || resolver.resource != server.ResourceURL ||
 		!resolver.contextAware || len(resolver.details) != 0 || len(resolver.alternatives) != 2 || strings.Join(resolver.alternatives[0], " ") != "issues:read" {
 		t.Fatalf("binding = %#v, resource = %q, details = %#v, alternatives = %#v", binding, resolver.resource, resolver.details, resolver.alternatives)
-	}
-}
-
-func TestResolveOperationCredentialBindingSelectsRequestedPublishedScope(t *testing.T) {
-	resolver := &recordingOperationCredentialResolver{binding: agent.CredentialBinding{
-		Reference: "selected-reference", Scopes: []string{"metadata:read"},
-	}}
-	binding, err := resolveOperationCredentialBinding(
-		resolver,
-		catalog.ResourceServer{CommandName: "github", ResourceURL: "https://api.example.com/github"},
-		githubOperationInspection(),
-		[]string{"issues", "issues-get"},
-		nil,
-		"metadata:read",
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if binding == nil || len(resolver.alternatives) != 1 || strings.Join(resolver.alternatives[0], " ") != "metadata:read" {
-		t.Fatalf("binding = %#v, alternatives = %#v", binding, resolver.alternatives)
-	}
-}
-
-func TestResolveOperationCredentialBindingRejectsUnpublishedRequestedScope(t *testing.T) {
-	resolver := &recordingOperationCredentialResolver{}
-	_, err := resolveOperationCredentialBinding(
-		resolver,
-		catalog.ResourceServer{CommandName: "github", ResourceURL: "https://api.example.com/github"},
-		githubOperationInspection(),
-		[]string{"issues", "issues-get"},
-		nil,
-		"issues:write",
-	)
-	if err == nil || !strings.Contains(err.Error(), "does not publish") {
-		t.Fatalf("error = %v", err)
 	}
 }
 
@@ -528,7 +538,6 @@ func TestResolveOperationCredentialBindingDoesNotResolveHelp(t *testing.T) {
 		githubOperationInspection(),
 		[]string{"issues", "issues-get", "--help"},
 		nil,
-		"",
 	)
 	if err != nil || binding != nil || resolver.resource != "" {
 		t.Fatalf("binding = %#v, resource = %q, error = %v", binding, resolver.resource, err)
@@ -543,7 +552,6 @@ func TestResolveOperationCredentialBindingReportsMissingExistingOffer(t *testing
 		githubOperationInspection(),
 		[]string{"issues", "issues-get"},
 		nil,
-		"",
 	)
 	if err == nil || !strings.Contains(err.Error(), "no approved Agent authority") || !strings.Contains(err.Error(), "issues:read") {
 		t.Fatalf("error = %v", err)
