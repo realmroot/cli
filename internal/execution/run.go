@@ -28,6 +28,7 @@ type RunOptions struct {
 	AuthorizationDetails      []map[string]any
 	ExactAuthorizationContext bool
 	EffectiveScopes           []string
+	RequestAuthority          func(context.Context, []string) error
 }
 
 func NewRunner(service *agent.Service, client *http.Client, stdin io.Reader, stdout, stderr io.Writer) *Runner {
@@ -63,6 +64,20 @@ func (r *Runner) Run(ctx context.Context, server catalog.ResourceServer, integra
 		r.service.CredentialSource(),
 		func(reference string, alternatives [][]string) ([]string, error) {
 			resolved, err := r.service.BindingForReferenceScopeAlternatives(server.ResourceURL, reference, alternatives)
+			if err == nil {
+				return intersectScopes(resolved.Scopes, options.EffectiveScopes), nil
+			}
+			if !errors.Is(err, os.ErrNotExist) || options.RequestAuthority == nil {
+				return nil, err
+			}
+			required, err := permittedScopeAlternative(alternatives, options.EffectiveScopes)
+			if err != nil {
+				return nil, err
+			}
+			if err := options.RequestAuthority(ctx, required); err != nil {
+				return nil, err
+			}
+			resolved, err = r.service.BindingForReferenceScopeAlternatives(server.ResourceURL, reference, alternatives)
 			return intersectScopes(resolved.Scopes, options.EffectiveScopes), err
 		},
 		r.client,
@@ -134,6 +149,26 @@ func (r *Runner) Run(ctx context.Context, server catalog.ResourceServer, integra
 		}
 	}
 	return err
+}
+
+func permittedScopeAlternative(alternatives [][]string, allowed []string) ([]string, error) {
+	allowedSet := make(map[string]bool, len(allowed))
+	for _, scope := range allowed {
+		allowedSet[scope] = true
+	}
+	for _, alternative := range alternatives {
+		permitted := true
+		for _, scope := range alternative {
+			if !allowedSet[scope] {
+				permitted = false
+				break
+			}
+		}
+		if permitted && len(alternative) > 0 {
+			return append([]string(nil), alternative...), nil
+		}
+	}
+	return nil, errors.New("native command requested scopes outside the selected Resource Context")
 }
 
 func intersectScopes(scopes, allowed []string) []string {

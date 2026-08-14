@@ -142,11 +142,19 @@ func (a *App) execCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			accessService, err := access.New(service, httpClient)
+			if err != nil {
+				return err
+			}
 			runner := execution.NewRunner(service, httpClient, command.InOrStdin(), a.stdout, a.stderr)
 			return runner.Run(command.Context(), server, integrations, args, execution.RunOptions{
 				AuthorizationDetails:      selected,
 				ExactAuthorizationContext: true,
 				EffectiveScopes:           executionScopes(details, selected, server.Scopes),
+				RequestAuthority: func(ctx context.Context, scopes []string) error {
+					_, err := accessService.Request(ctx, server, scopes, selected, "Run the requested native command", access.RequestOptions{})
+					return err
+				},
 			})
 		},
 	}
