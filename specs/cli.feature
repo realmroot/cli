@@ -1,5 +1,12 @@
 Feature: Realmroot Toolbox command line
 
+  @journey:install-release @entrypoint:release
+  Scenario: Install Toolbox without a Go toolchain
+    Given a stable Toolbox version is tagged for release
+    When the release workflow publishes that version
+    Then macOS, Linux, and Windows archives are available with checksums
+    And macOS users can install the same version from the maintained Homebrew Tap
+
   @journey:cli-version @entrypoint:version
   Scenario: Inspect the installed Toolbox build
     When the Agent runs "realmroot version"

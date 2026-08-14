@@ -6,11 +6,28 @@ Users install one command and do not need a separate plugin or runtime.
 
 ## Install
 
-Go 1.25.3 or newer is the only build prerequisite.
+Homebrew installs a prebuilt macOS binary and does not require Go:
 
 ```console
-git clone https://github.com/realmroot/toolbox.git
-cd toolbox
+brew install --cask saltbo/tap/realmroot
+```
+
+Prebuilt archives for macOS, Linux, and Windows are available from
+[GitHub Releases](https://github.com/realmroot/cli/releases). Verify manual
+downloads against the published `checksums.txt` before installing the
+`realmroot` binary on your `PATH`.
+
+Go developers can install directly from the module:
+
+```console
+go install github.com/realmroot/toolbox@latest
+```
+
+To build the current checkout instead:
+
+```console
+git clone https://github.com/realmroot/cli.git
+cd cli
 make install
 ```
 

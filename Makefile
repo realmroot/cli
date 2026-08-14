@@ -1,4 +1,4 @@
-.PHONY: generate test verify build install
+.PHONY: generate test verify build install release-check
 
 VERSION ?= dev
 COMMIT ?= $(shell git describe --always --dirty 2>/dev/null)
@@ -17,5 +17,9 @@ build:
 
 install:
 	go build -ldflags "$(LDFLAGS)" -o "$$(go env GOPATH)/bin/realmroot" .
+
+release-check:
+	goreleaser check
+	goreleaser release --snapshot --clean
 
 verify: test build
