@@ -51,6 +51,19 @@ func TestRootHelpExposesOnlyProductCommands(t *testing.T) {
 	}
 }
 
+func TestRootHelpDocumentsDiagnosticLogLevel(t *testing.T) {
+	// [spec: cli/cli-diagnostics]
+	var stdout, stderr bytes.Buffer
+	command := New(&stdout, &stderr)
+	command.SetArgs([]string{"--help"})
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stdout.String(), "--log-level") || !strings.Contains(stdout.String(), "trace, debug, info, warn, or error") {
+		t.Fatalf("help omitted diagnostic log levels:\n%s", stdout.String())
+	}
+}
+
 func TestVersionCommandReportsBuildInformation(t *testing.T) {
 	// [spec: cli/cli-version]
 	original := buildinfo.Current()
@@ -214,6 +227,14 @@ func TestParseExecFlagsPreservesNativeArgumentsAfterSeparator(t *testing.T) {
 	}
 	if options.context != "realmroot" {
 		t.Fatalf("options = %#v", options)
+	}
+}
+
+func TestParseExecFlagsConsumesLogLevelBeforeNativeSeparator(t *testing.T) {
+	app := &App{}
+	args, _, err := app.parseExecFlags([]string{"--log-level", "trace", "github", "--", "gh", "api", "--log-level", "debug"})
+	if err != nil || app.logLevel != "trace" || strings.Join(args, " ") != "github -- gh api --log-level debug" {
+		t.Fatalf("args=%v logLevel=%q err=%v", args, app.logLevel, err)
 	}
 }
 

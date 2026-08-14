@@ -290,8 +290,9 @@ func ensureInternalProtocolCredential(
 	if credential.AccessToken == "" || credential.ExpiresAt == nil ||
 		!time.Now().Add(5*time.Second).Before(*credential.ExpiresAt) ||
 		!scopesContain(credential.Scopes, requiredScopes) {
+		requestedScopes := retainedBootstrapScopes(credential.Scopes, requiredScopes, configuration.AgentBootstrapScopes)
 		updated, err := requestProtocolToken(
-			ctx, client, reference.state, *credential, configuration, requiredScopes,
+			ctx, client, reference.state, *credential, configuration, requestedScopes,
 		)
 		if err != nil {
 			return dpopCredential{}, err

@@ -429,8 +429,9 @@ func ensureProtocolCredential(
 	}
 	if credential.AccessToken == "" || credential.ExpiresAt == nil ||
 		!time.Now().Add(5*time.Second).Before(*credential.ExpiresAt) ||
-		!sameStringSet(credential.Scopes, requiredScopes) {
-		updated, err := requestProtocolToken(ctx, client, state, *credential, configuration, requiredScopes)
+		!scopesContain(credential.Scopes, requiredScopes) {
+		requestedScopes := retainedBootstrapScopes(credential.Scopes, requiredScopes, configuration.AgentBootstrapScopes)
+		updated, err := requestProtocolToken(ctx, client, state, *credential, configuration, requestedScopes)
 		if err != nil {
 			return state, dpopCredential{}, err
 		}
@@ -441,6 +442,20 @@ func ensureProtocolCredential(
 		return state, dpopCredential{}, err
 	}
 	return state, *credential, nil
+}
+
+func retainedBootstrapScopes(current, required, supported []string) []string {
+	allowed := make(map[string]bool, len(supported))
+	for _, scope := range supported {
+		allowed[scope] = true
+	}
+	result := append([]string(nil), required...)
+	for _, scope := range current {
+		if allowed[scope] && !contains(result, scope) {
+			result = append(result, scope)
+		}
+	}
+	return result
 }
 
 func requestProtocolToken(

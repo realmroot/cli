@@ -14,6 +14,14 @@ Feature: Realmroot Toolbox command line
     And release builds may also report their source commit and build time
     And JSON output uses stable version, commit, and build time fields
 
+  @journey:cli-diagnostics @entrypoint:root
+  Scenario: Inspect command execution diagnostics
+    When the Agent selects a log level with "--log-level"
+    Then diagnostics at that level and above are written to standard error
+    And native execution reports discovery, authorization, broker, HTTP, and child-process timing
+    And diagnostics correlate one command across Realmroot and Resource Server requests
+    But credentials, request bodies, and URL query parameters are never logged
+
   @journey:invalid-command @entrypoint:agent
   Scenario: Reject an unsupported Agent command
     When the Agent runs an unsupported command such as "realmroot agent status"

@@ -90,6 +90,71 @@ func TestCredentialSourceIssuesAgentBootstrapCredentialWithRestishProof(t *testi
 	}
 }
 
+func TestInternalProtocolCredentialRetainsPreviouslyIssuedBootstrapScopes(t *testing.T) {
+	// [spec: cli/cli-diagnostics]
+	offer := testCredential(t, "", time.Time{})
+	states := newCredentialState(t, offer)
+	expiresAt := time.Now().Add(time.Minute)
+	privateKey, err := newDPoPPrivateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	states.state.ProtocolCredential = &dpopCredential{
+		ResourceIndicator:  "https://auth.example.com/api",
+		CredentialEndpoint: "https://auth.example.com/api/auth/oauth2/token",
+		ProofTarget:        "https://auth.example.com/api/auth/oauth2/token",
+		PrivateKey:         privateKey, AccessToken: "resource-token", ExpiresAt: &expiresAt,
+		Scopes: []string{"resource-servers:read"},
+	}
+	tokenRequests := 0
+	client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		tokenRequests++
+		encoded, err := io.ReadAll(request.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := url.ParseQuery(string(encoded))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !sameStringSet(strings.Fields(body.Get("scope")), []string{"authorization-details:read", "resource-servers:read"}) {
+			t.Fatalf("scope = %q", body.Get("scope"))
+		}
+		return jsonResponse(http.StatusOK, map[string]any{
+			"access_token": "combined-token", "token_type": "DPoP", "expires_in": 300,
+		}), nil
+	})
+	configuration := agentConfiguration{
+		AgentTokenEndpoint: "https://auth.example.com/api/auth/oauth2/token",
+		AgentBootstrapScopes: []string{
+			"resource-servers:read", "authorization-details:read", "access-requests:read", "access-requests:write",
+		},
+	}
+
+	reference := credentialSourceStateReference{
+		path: "memory", state: states.state, reference: testCredentialSourceReference,
+		source: states.state.CredentialSources[testCredentialSourceReference],
+	}
+	credential, err := ensureInternalProtocolCredential(
+		context.Background(), client, states, reference, configuration, []string{"authorization-details:read"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameStringSet(credential.Scopes, []string{"authorization-details:read", "resource-servers:read"}) {
+		t.Fatalf("credential scopes = %v", credential.Scopes)
+	}
+	reference.state = states.state
+	if _, err := ensureInternalProtocolCredential(
+		context.Background(), client, states, reference, configuration, []string{"resource-servers:read"},
+	); err != nil {
+		t.Fatal(err)
+	}
+	if tokenRequests != 1 {
+		t.Fatalf("token requests = %d, want 1", tokenRequests)
+	}
+}
+
 func TestCredentialSourceDescribesStoredOfferWithoutCredentialMaterial(t *testing.T) {
 	offer := testCredential(t, "", time.Time{})
 	states := newCredentialState(t, offer)
