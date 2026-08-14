@@ -1301,27 +1301,6 @@ func (e GetAgentEnrollment404JSONResponseBodyErrorCode) Valid() bool {
 	}
 }
 
-// Defines values for ListResourceServers200JSONResponseBodyItemsAccessMode.
-const (
-	ListResourceServers200JSONResponseBodyItemsAccessModeBrokered      ListResourceServers200JSONResponseBodyItemsAccessMode = "brokered"
-	ListResourceServers200JSONResponseBodyItemsAccessModeExternalOauth ListResourceServers200JSONResponseBodyItemsAccessMode = "external_oauth"
-	ListResourceServers200JSONResponseBodyItemsAccessModeRealmroot     ListResourceServers200JSONResponseBodyItemsAccessMode = "realmroot"
-)
-
-// Valid indicates whether the value is a known member of the ListResourceServers200JSONResponseBodyItemsAccessMode enum.
-func (e ListResourceServers200JSONResponseBodyItemsAccessMode) Valid() bool {
-	switch e {
-	case ListResourceServers200JSONResponseBodyItemsAccessModeBrokered:
-		return true
-	case ListResourceServers200JSONResponseBodyItemsAccessModeExternalOauth:
-		return true
-	case ListResourceServers200JSONResponseBodyItemsAccessModeRealmroot:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for ListResourceServers200JSONResponseBodyItemsAuthorizationClientSecretConfigured.
 const (
 	ListResourceServers200JSONResponseBodyItemsAuthorizationClientSecretConfiguredTrue ListResourceServers200JSONResponseBodyItemsAuthorizationClientSecretConfigured = true
@@ -1376,6 +1355,24 @@ func (e ListResourceServers200JSONResponseBodyItemsAuthorizationStatus) Valid() 
 	}
 }
 
+// Defines values for ListResourceServers200JSONResponseBodyItemsAuthorizationModel.
+const (
+	ListResourceServers200JSONResponseBodyItemsAuthorizationModelExternal ListResourceServers200JSONResponseBodyItemsAuthorizationModel = "external"
+	ListResourceServers200JSONResponseBodyItemsAuthorizationModelNative   ListResourceServers200JSONResponseBodyItemsAuthorizationModel = "native"
+)
+
+// Valid indicates whether the value is a known member of the ListResourceServers200JSONResponseBodyItemsAuthorizationModel enum.
+func (e ListResourceServers200JSONResponseBodyItemsAuthorizationModel) Valid() bool {
+	switch e {
+	case ListResourceServers200JSONResponseBodyItemsAuthorizationModelExternal:
+		return true
+	case ListResourceServers200JSONResponseBodyItemsAuthorizationModelNative:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ListResourceServers200JSONResponseBodyItemsAvailabilityStatus.
 const (
 	ListResourceServers200JSONResponseBodyItemsAvailabilityStatusAvailable   ListResourceServers200JSONResponseBodyItemsAvailabilityStatus = "available"
@@ -1409,21 +1406,6 @@ func (e ListResourceServers200JSONResponseBodyItemsConnectionStatus) Valid() boo
 	case ListResourceServers200JSONResponseBodyItemsConnectionStatusNotConnected:
 		return true
 	case ListResourceServers200JSONResponseBodyItemsConnectionStatusNotRequired:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for ListResourceServers200JSONResponseBodyItemsScopeRegistryAccountConnectionMode.
-const (
-	ListResourceServers200JSONResponseBodyItemsScopeRegistryAccountConnectionModeBrokered ListResourceServers200JSONResponseBodyItemsScopeRegistryAccountConnectionMode = "brokered"
-)
-
-// Valid indicates whether the value is a known member of the ListResourceServers200JSONResponseBodyItemsScopeRegistryAccountConnectionMode enum.
-func (e ListResourceServers200JSONResponseBodyItemsScopeRegistryAccountConnectionMode) Valid() bool {
-	switch e {
-	case ListResourceServers200JSONResponseBodyItemsScopeRegistryAccountConnectionModeBrokered:
 		return true
 	default:
 		return false
@@ -1550,27 +1532,6 @@ func (e ListResourceServers403JSONResponseBodyErrorCode) Valid() bool {
 	}
 }
 
-// Defines values for GetResourceServer200JSONResponseBodyAccessMode.
-const (
-	GetResourceServer200JSONResponseBodyAccessModeBrokered      GetResourceServer200JSONResponseBodyAccessMode = "brokered"
-	GetResourceServer200JSONResponseBodyAccessModeExternalOauth GetResourceServer200JSONResponseBodyAccessMode = "external_oauth"
-	GetResourceServer200JSONResponseBodyAccessModeRealmroot     GetResourceServer200JSONResponseBodyAccessMode = "realmroot"
-)
-
-// Valid indicates whether the value is a known member of the GetResourceServer200JSONResponseBodyAccessMode enum.
-func (e GetResourceServer200JSONResponseBodyAccessMode) Valid() bool {
-	switch e {
-	case GetResourceServer200JSONResponseBodyAccessModeBrokered:
-		return true
-	case GetResourceServer200JSONResponseBodyAccessModeExternalOauth:
-		return true
-	case GetResourceServer200JSONResponseBodyAccessModeRealmroot:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for GetResourceServer200JSONResponseBodyAuthorizationClientSecretConfigured.
 const (
 	GetResourceServer200JSONResponseBodyAuthorizationClientSecretConfiguredTrue GetResourceServer200JSONResponseBodyAuthorizationClientSecretConfigured = true
@@ -1606,19 +1567,37 @@ func (e GetResourceServer200JSONResponseBodyAuthorizationRegistrationMode) Valid
 
 // Defines values for GetResourceServer200JSONResponseBodyAuthorizationStatus.
 const (
-	GetResourceServer200JSONResponseBodyAuthorizationStatusActive  GetResourceServer200JSONResponseBodyAuthorizationStatus = "active"
-	GetResourceServer200JSONResponseBodyAuthorizationStatusInvalid GetResourceServer200JSONResponseBodyAuthorizationStatus = "invalid"
-	GetResourceServer200JSONResponseBodyAuthorizationStatusPending GetResourceServer200JSONResponseBodyAuthorizationStatus = "pending"
+	Active  GetResourceServer200JSONResponseBodyAuthorizationStatus = "active"
+	Invalid GetResourceServer200JSONResponseBodyAuthorizationStatus = "invalid"
+	Pending GetResourceServer200JSONResponseBodyAuthorizationStatus = "pending"
 )
 
 // Valid indicates whether the value is a known member of the GetResourceServer200JSONResponseBodyAuthorizationStatus enum.
 func (e GetResourceServer200JSONResponseBodyAuthorizationStatus) Valid() bool {
 	switch e {
-	case GetResourceServer200JSONResponseBodyAuthorizationStatusActive:
+	case Active:
 		return true
-	case GetResourceServer200JSONResponseBodyAuthorizationStatusInvalid:
+	case Invalid:
 		return true
-	case GetResourceServer200JSONResponseBodyAuthorizationStatusPending:
+	case Pending:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetResourceServer200JSONResponseBodyAuthorizationModel.
+const (
+	GetResourceServer200JSONResponseBodyAuthorizationModelExternal GetResourceServer200JSONResponseBodyAuthorizationModel = "external"
+	GetResourceServer200JSONResponseBodyAuthorizationModelNative   GetResourceServer200JSONResponseBodyAuthorizationModel = "native"
+)
+
+// Valid indicates whether the value is a known member of the GetResourceServer200JSONResponseBodyAuthorizationModel enum.
+func (e GetResourceServer200JSONResponseBodyAuthorizationModel) Valid() bool {
+	switch e {
+	case GetResourceServer200JSONResponseBodyAuthorizationModelExternal:
+		return true
+	case GetResourceServer200JSONResponseBodyAuthorizationModelNative:
 		return true
 	default:
 		return false
@@ -1658,21 +1637,6 @@ func (e GetResourceServer200JSONResponseBodyConnectionStatus) Valid() bool {
 	case GetResourceServer200JSONResponseBodyConnectionStatusNotConnected:
 		return true
 	case GetResourceServer200JSONResponseBodyConnectionStatusNotRequired:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for GetResourceServer200JSONResponseBodyScopeRegistryAccountConnectionMode.
-const (
-	GetResourceServer200JSONResponseBodyScopeRegistryAccountConnectionModeBrokered GetResourceServer200JSONResponseBodyScopeRegistryAccountConnectionMode = "brokered"
-)
-
-// Valid indicates whether the value is a known member of the GetResourceServer200JSONResponseBodyScopeRegistryAccountConnectionMode enum.
-func (e GetResourceServer200JSONResponseBodyScopeRegistryAccountConnectionMode) Valid() bool {
-	switch e {
-	case GetResourceServer200JSONResponseBodyScopeRegistryAccountConnectionModeBrokered:
 		return true
 	default:
 		return false
@@ -1898,306 +1862,6 @@ func (e ListResourceServerAuthorizationDetails403JSONResponseBodyErrorCode) Vali
 	case ListResourceServerAuthorizationDetails403JSONResponseBodyErrorCodeResourceInUse:
 		return true
 	case ListResourceServerAuthorizationDetails403JSONResponseBodyErrorCodeUnauthorized:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for CreateConnectionRequest201JSONResponseBodyInteractionStatus.
-const (
-	CreateConnectionRequest201JSONResponseBodyInteractionStatusCompleted CreateConnectionRequest201JSONResponseBodyInteractionStatus = "completed"
-	CreateConnectionRequest201JSONResponseBodyInteractionStatusDenied    CreateConnectionRequest201JSONResponseBodyInteractionStatus = "denied"
-	CreateConnectionRequest201JSONResponseBodyInteractionStatusExpired   CreateConnectionRequest201JSONResponseBodyInteractionStatus = "expired"
-	CreateConnectionRequest201JSONResponseBodyInteractionStatusFailed    CreateConnectionRequest201JSONResponseBodyInteractionStatus = "failed"
-	CreateConnectionRequest201JSONResponseBodyInteractionStatusPending   CreateConnectionRequest201JSONResponseBodyInteractionStatus = "pending"
-)
-
-// Valid indicates whether the value is a known member of the CreateConnectionRequest201JSONResponseBodyInteractionStatus enum.
-func (e CreateConnectionRequest201JSONResponseBodyInteractionStatus) Valid() bool {
-	switch e {
-	case CreateConnectionRequest201JSONResponseBodyInteractionStatusCompleted:
-		return true
-	case CreateConnectionRequest201JSONResponseBodyInteractionStatusDenied:
-		return true
-	case CreateConnectionRequest201JSONResponseBodyInteractionStatusExpired:
-		return true
-	case CreateConnectionRequest201JSONResponseBodyInteractionStatusFailed:
-		return true
-	case CreateConnectionRequest201JSONResponseBodyInteractionStatusPending:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for CreateConnectionRequest201JSONResponseBodyInteractionType.
-const (
-	CreateConnectionRequest201JSONResponseBodyInteractionTypeUserApproval CreateConnectionRequest201JSONResponseBodyInteractionType = "user-approval"
-)
-
-// Valid indicates whether the value is a known member of the CreateConnectionRequest201JSONResponseBodyInteractionType enum.
-func (e CreateConnectionRequest201JSONResponseBodyInteractionType) Valid() bool {
-	switch e {
-	case CreateConnectionRequest201JSONResponseBodyInteractionTypeUserApproval:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for CreateConnectionRequest201JSONResponseBodyStatus.
-const (
-	CreateConnectionRequest201JSONResponseBodyStatusConnected CreateConnectionRequest201JSONResponseBodyStatus = "connected"
-	CreateConnectionRequest201JSONResponseBodyStatusDenied    CreateConnectionRequest201JSONResponseBodyStatus = "denied"
-	CreateConnectionRequest201JSONResponseBodyStatusExpired   CreateConnectionRequest201JSONResponseBodyStatus = "expired"
-	CreateConnectionRequest201JSONResponseBodyStatusPending   CreateConnectionRequest201JSONResponseBodyStatus = "pending"
-)
-
-// Valid indicates whether the value is a known member of the CreateConnectionRequest201JSONResponseBodyStatus enum.
-func (e CreateConnectionRequest201JSONResponseBodyStatus) Valid() bool {
-	switch e {
-	case CreateConnectionRequest201JSONResponseBodyStatusConnected:
-		return true
-	case CreateConnectionRequest201JSONResponseBodyStatusDenied:
-		return true
-	case CreateConnectionRequest201JSONResponseBodyStatusExpired:
-		return true
-	case CreateConnectionRequest201JSONResponseBodyStatusPending:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for CreateConnectionRequest401JSONResponseBodyErrorCode.
-const (
-	CreateConnectionRequest401JSONResponseBodyErrorCodeBadGateway           CreateConnectionRequest401JSONResponseBodyErrorCode = "bad_gateway"
-	CreateConnectionRequest401JSONResponseBodyErrorCodeBadRequest           CreateConnectionRequest401JSONResponseBodyErrorCode = "bad_request"
-	CreateConnectionRequest401JSONResponseBodyErrorCodeConflict             CreateConnectionRequest401JSONResponseBodyErrorCode = "conflict"
-	CreateConnectionRequest401JSONResponseBodyErrorCodeForbidden            CreateConnectionRequest401JSONResponseBodyErrorCode = "forbidden"
-	CreateConnectionRequest401JSONResponseBodyErrorCodeInternalError        CreateConnectionRequest401JSONResponseBodyErrorCode = "internal_error"
-	CreateConnectionRequest401JSONResponseBodyErrorCodeNotFound             CreateConnectionRequest401JSONResponseBodyErrorCode = "not_found"
-	CreateConnectionRequest401JSONResponseBodyErrorCodePreconditionFailed   CreateConnectionRequest401JSONResponseBodyErrorCode = "precondition_failed"
-	CreateConnectionRequest401JSONResponseBodyErrorCodePreconditionRequired CreateConnectionRequest401JSONResponseBodyErrorCode = "precondition_required"
-	CreateConnectionRequest401JSONResponseBodyErrorCodeResourceInUse        CreateConnectionRequest401JSONResponseBodyErrorCode = "resource_in_use"
-	CreateConnectionRequest401JSONResponseBodyErrorCodeUnauthorized         CreateConnectionRequest401JSONResponseBodyErrorCode = "unauthorized"
-)
-
-// Valid indicates whether the value is a known member of the CreateConnectionRequest401JSONResponseBodyErrorCode enum.
-func (e CreateConnectionRequest401JSONResponseBodyErrorCode) Valid() bool {
-	switch e {
-	case CreateConnectionRequest401JSONResponseBodyErrorCodeBadGateway:
-		return true
-	case CreateConnectionRequest401JSONResponseBodyErrorCodeBadRequest:
-		return true
-	case CreateConnectionRequest401JSONResponseBodyErrorCodeConflict:
-		return true
-	case CreateConnectionRequest401JSONResponseBodyErrorCodeForbidden:
-		return true
-	case CreateConnectionRequest401JSONResponseBodyErrorCodeInternalError:
-		return true
-	case CreateConnectionRequest401JSONResponseBodyErrorCodeNotFound:
-		return true
-	case CreateConnectionRequest401JSONResponseBodyErrorCodePreconditionFailed:
-		return true
-	case CreateConnectionRequest401JSONResponseBodyErrorCodePreconditionRequired:
-		return true
-	case CreateConnectionRequest401JSONResponseBodyErrorCodeResourceInUse:
-		return true
-	case CreateConnectionRequest401JSONResponseBodyErrorCodeUnauthorized:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for CreateConnectionRequest403JSONResponseBodyErrorCode.
-const (
-	CreateConnectionRequest403JSONResponseBodyErrorCodeBadGateway           CreateConnectionRequest403JSONResponseBodyErrorCode = "bad_gateway"
-	CreateConnectionRequest403JSONResponseBodyErrorCodeBadRequest           CreateConnectionRequest403JSONResponseBodyErrorCode = "bad_request"
-	CreateConnectionRequest403JSONResponseBodyErrorCodeConflict             CreateConnectionRequest403JSONResponseBodyErrorCode = "conflict"
-	CreateConnectionRequest403JSONResponseBodyErrorCodeForbidden            CreateConnectionRequest403JSONResponseBodyErrorCode = "forbidden"
-	CreateConnectionRequest403JSONResponseBodyErrorCodeInternalError        CreateConnectionRequest403JSONResponseBodyErrorCode = "internal_error"
-	CreateConnectionRequest403JSONResponseBodyErrorCodeNotFound             CreateConnectionRequest403JSONResponseBodyErrorCode = "not_found"
-	CreateConnectionRequest403JSONResponseBodyErrorCodePreconditionFailed   CreateConnectionRequest403JSONResponseBodyErrorCode = "precondition_failed"
-	CreateConnectionRequest403JSONResponseBodyErrorCodePreconditionRequired CreateConnectionRequest403JSONResponseBodyErrorCode = "precondition_required"
-	CreateConnectionRequest403JSONResponseBodyErrorCodeResourceInUse        CreateConnectionRequest403JSONResponseBodyErrorCode = "resource_in_use"
-	CreateConnectionRequest403JSONResponseBodyErrorCodeUnauthorized         CreateConnectionRequest403JSONResponseBodyErrorCode = "unauthorized"
-)
-
-// Valid indicates whether the value is a known member of the CreateConnectionRequest403JSONResponseBodyErrorCode enum.
-func (e CreateConnectionRequest403JSONResponseBodyErrorCode) Valid() bool {
-	switch e {
-	case CreateConnectionRequest403JSONResponseBodyErrorCodeBadGateway:
-		return true
-	case CreateConnectionRequest403JSONResponseBodyErrorCodeBadRequest:
-		return true
-	case CreateConnectionRequest403JSONResponseBodyErrorCodeConflict:
-		return true
-	case CreateConnectionRequest403JSONResponseBodyErrorCodeForbidden:
-		return true
-	case CreateConnectionRequest403JSONResponseBodyErrorCodeInternalError:
-		return true
-	case CreateConnectionRequest403JSONResponseBodyErrorCodeNotFound:
-		return true
-	case CreateConnectionRequest403JSONResponseBodyErrorCodePreconditionFailed:
-		return true
-	case CreateConnectionRequest403JSONResponseBodyErrorCodePreconditionRequired:
-		return true
-	case CreateConnectionRequest403JSONResponseBodyErrorCodeResourceInUse:
-		return true
-	case CreateConnectionRequest403JSONResponseBodyErrorCodeUnauthorized:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for GetConnectionRequest200JSONResponseBodyInteractionStatus.
-const (
-	GetConnectionRequest200JSONResponseBodyInteractionStatusCompleted GetConnectionRequest200JSONResponseBodyInteractionStatus = "completed"
-	GetConnectionRequest200JSONResponseBodyInteractionStatusDenied    GetConnectionRequest200JSONResponseBodyInteractionStatus = "denied"
-	GetConnectionRequest200JSONResponseBodyInteractionStatusExpired   GetConnectionRequest200JSONResponseBodyInteractionStatus = "expired"
-	GetConnectionRequest200JSONResponseBodyInteractionStatusFailed    GetConnectionRequest200JSONResponseBodyInteractionStatus = "failed"
-	GetConnectionRequest200JSONResponseBodyInteractionStatusPending   GetConnectionRequest200JSONResponseBodyInteractionStatus = "pending"
-)
-
-// Valid indicates whether the value is a known member of the GetConnectionRequest200JSONResponseBodyInteractionStatus enum.
-func (e GetConnectionRequest200JSONResponseBodyInteractionStatus) Valid() bool {
-	switch e {
-	case GetConnectionRequest200JSONResponseBodyInteractionStatusCompleted:
-		return true
-	case GetConnectionRequest200JSONResponseBodyInteractionStatusDenied:
-		return true
-	case GetConnectionRequest200JSONResponseBodyInteractionStatusExpired:
-		return true
-	case GetConnectionRequest200JSONResponseBodyInteractionStatusFailed:
-		return true
-	case GetConnectionRequest200JSONResponseBodyInteractionStatusPending:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for GetConnectionRequest200JSONResponseBodyInteractionType.
-const (
-	GetConnectionRequest200JSONResponseBodyInteractionTypeUserApproval GetConnectionRequest200JSONResponseBodyInteractionType = "user-approval"
-)
-
-// Valid indicates whether the value is a known member of the GetConnectionRequest200JSONResponseBodyInteractionType enum.
-func (e GetConnectionRequest200JSONResponseBodyInteractionType) Valid() bool {
-	switch e {
-	case GetConnectionRequest200JSONResponseBodyInteractionTypeUserApproval:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for GetConnectionRequest200JSONResponseBodyStatus.
-const (
-	Connected GetConnectionRequest200JSONResponseBodyStatus = "connected"
-	Denied    GetConnectionRequest200JSONResponseBodyStatus = "denied"
-	Expired   GetConnectionRequest200JSONResponseBodyStatus = "expired"
-	Pending   GetConnectionRequest200JSONResponseBodyStatus = "pending"
-)
-
-// Valid indicates whether the value is a known member of the GetConnectionRequest200JSONResponseBodyStatus enum.
-func (e GetConnectionRequest200JSONResponseBodyStatus) Valid() bool {
-	switch e {
-	case Connected:
-		return true
-	case Denied:
-		return true
-	case Expired:
-		return true
-	case Pending:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for GetConnectionRequest401JSONResponseBodyErrorCode.
-const (
-	GetConnectionRequest401JSONResponseBodyErrorCodeBadGateway           GetConnectionRequest401JSONResponseBodyErrorCode = "bad_gateway"
-	GetConnectionRequest401JSONResponseBodyErrorCodeBadRequest           GetConnectionRequest401JSONResponseBodyErrorCode = "bad_request"
-	GetConnectionRequest401JSONResponseBodyErrorCodeConflict             GetConnectionRequest401JSONResponseBodyErrorCode = "conflict"
-	GetConnectionRequest401JSONResponseBodyErrorCodeForbidden            GetConnectionRequest401JSONResponseBodyErrorCode = "forbidden"
-	GetConnectionRequest401JSONResponseBodyErrorCodeInternalError        GetConnectionRequest401JSONResponseBodyErrorCode = "internal_error"
-	GetConnectionRequest401JSONResponseBodyErrorCodeNotFound             GetConnectionRequest401JSONResponseBodyErrorCode = "not_found"
-	GetConnectionRequest401JSONResponseBodyErrorCodePreconditionFailed   GetConnectionRequest401JSONResponseBodyErrorCode = "precondition_failed"
-	GetConnectionRequest401JSONResponseBodyErrorCodePreconditionRequired GetConnectionRequest401JSONResponseBodyErrorCode = "precondition_required"
-	GetConnectionRequest401JSONResponseBodyErrorCodeResourceInUse        GetConnectionRequest401JSONResponseBodyErrorCode = "resource_in_use"
-	GetConnectionRequest401JSONResponseBodyErrorCodeUnauthorized         GetConnectionRequest401JSONResponseBodyErrorCode = "unauthorized"
-)
-
-// Valid indicates whether the value is a known member of the GetConnectionRequest401JSONResponseBodyErrorCode enum.
-func (e GetConnectionRequest401JSONResponseBodyErrorCode) Valid() bool {
-	switch e {
-	case GetConnectionRequest401JSONResponseBodyErrorCodeBadGateway:
-		return true
-	case GetConnectionRequest401JSONResponseBodyErrorCodeBadRequest:
-		return true
-	case GetConnectionRequest401JSONResponseBodyErrorCodeConflict:
-		return true
-	case GetConnectionRequest401JSONResponseBodyErrorCodeForbidden:
-		return true
-	case GetConnectionRequest401JSONResponseBodyErrorCodeInternalError:
-		return true
-	case GetConnectionRequest401JSONResponseBodyErrorCodeNotFound:
-		return true
-	case GetConnectionRequest401JSONResponseBodyErrorCodePreconditionFailed:
-		return true
-	case GetConnectionRequest401JSONResponseBodyErrorCodePreconditionRequired:
-		return true
-	case GetConnectionRequest401JSONResponseBodyErrorCodeResourceInUse:
-		return true
-	case GetConnectionRequest401JSONResponseBodyErrorCodeUnauthorized:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for GetConnectionRequest403JSONResponseBodyErrorCode.
-const (
-	GetConnectionRequest403JSONResponseBodyErrorCodeBadGateway           GetConnectionRequest403JSONResponseBodyErrorCode = "bad_gateway"
-	GetConnectionRequest403JSONResponseBodyErrorCodeBadRequest           GetConnectionRequest403JSONResponseBodyErrorCode = "bad_request"
-	GetConnectionRequest403JSONResponseBodyErrorCodeConflict             GetConnectionRequest403JSONResponseBodyErrorCode = "conflict"
-	GetConnectionRequest403JSONResponseBodyErrorCodeForbidden            GetConnectionRequest403JSONResponseBodyErrorCode = "forbidden"
-	GetConnectionRequest403JSONResponseBodyErrorCodeInternalError        GetConnectionRequest403JSONResponseBodyErrorCode = "internal_error"
-	GetConnectionRequest403JSONResponseBodyErrorCodeNotFound             GetConnectionRequest403JSONResponseBodyErrorCode = "not_found"
-	GetConnectionRequest403JSONResponseBodyErrorCodePreconditionFailed   GetConnectionRequest403JSONResponseBodyErrorCode = "precondition_failed"
-	GetConnectionRequest403JSONResponseBodyErrorCodePreconditionRequired GetConnectionRequest403JSONResponseBodyErrorCode = "precondition_required"
-	GetConnectionRequest403JSONResponseBodyErrorCodeResourceInUse        GetConnectionRequest403JSONResponseBodyErrorCode = "resource_in_use"
-	GetConnectionRequest403JSONResponseBodyErrorCodeUnauthorized         GetConnectionRequest403JSONResponseBodyErrorCode = "unauthorized"
-)
-
-// Valid indicates whether the value is a known member of the GetConnectionRequest403JSONResponseBodyErrorCode enum.
-func (e GetConnectionRequest403JSONResponseBodyErrorCode) Valid() bool {
-	switch e {
-	case GetConnectionRequest403JSONResponseBodyErrorCodeBadGateway:
-		return true
-	case GetConnectionRequest403JSONResponseBodyErrorCodeBadRequest:
-		return true
-	case GetConnectionRequest403JSONResponseBodyErrorCodeConflict:
-		return true
-	case GetConnectionRequest403JSONResponseBodyErrorCodeForbidden:
-		return true
-	case GetConnectionRequest403JSONResponseBodyErrorCodeInternalError:
-		return true
-	case GetConnectionRequest403JSONResponseBodyErrorCodeNotFound:
-		return true
-	case GetConnectionRequest403JSONResponseBodyErrorCodePreconditionFailed:
-		return true
-	case GetConnectionRequest403JSONResponseBodyErrorCodePreconditionRequired:
-		return true
-	case GetConnectionRequest403JSONResponseBodyErrorCodeResourceInUse:
-		return true
-	case GetConnectionRequest403JSONResponseBodyErrorCodeUnauthorized:
 		return true
 	default:
 		return false
@@ -2577,9 +2241,6 @@ type ListResourceServersParams struct {
 	OwnerOrganizationId *string `form:"ownerOrganizationId,omitempty" json:"ownerOrganizationId,omitempty"`
 }
 
-// ListResourceServers200JSONResponseBodyItemsAccessMode defines parameters for ListResourceServers.
-type ListResourceServers200JSONResponseBodyItemsAccessMode string
-
 // ListResourceServers200JSONResponseBodyItemsAuthorizationClientSecretConfigured defines parameters for ListResourceServers.
 type ListResourceServers200JSONResponseBodyItemsAuthorizationClientSecretConfigured bool
 
@@ -2595,14 +2256,14 @@ type ListResourceServers200JSONResponseBody_Items_AuthorizationDetails_Item stru
 	AdditionalProperties map[string]string `json:"-"`
 }
 
+// ListResourceServers200JSONResponseBodyItemsAuthorizationModel defines parameters for ListResourceServers.
+type ListResourceServers200JSONResponseBodyItemsAuthorizationModel string
+
 // ListResourceServers200JSONResponseBodyItemsAvailabilityStatus defines parameters for ListResourceServers.
 type ListResourceServers200JSONResponseBodyItemsAvailabilityStatus string
 
 // ListResourceServers200JSONResponseBodyItemsConnectionStatus defines parameters for ListResourceServers.
 type ListResourceServers200JSONResponseBodyItemsConnectionStatus string
-
-// ListResourceServers200JSONResponseBodyItemsScopeRegistryAccountConnectionMode defines parameters for ListResourceServers.
-type ListResourceServers200JSONResponseBodyItemsScopeRegistryAccountConnectionMode string
 
 // ListResourceServers200JSONResponseBodyItemsScopeRegistryScopesGrantMode defines parameters for ListResourceServers.
 type ListResourceServers200JSONResponseBodyItemsScopeRegistryScopesGrantMode string
@@ -2615,9 +2276,6 @@ type ListResourceServers401JSONResponseBodyErrorCode string
 
 // ListResourceServers403JSONResponseBodyErrorCode defines parameters for ListResourceServers.
 type ListResourceServers403JSONResponseBodyErrorCode string
-
-// GetResourceServer200JSONResponseBodyAccessMode defines parameters for GetResourceServer.
-type GetResourceServer200JSONResponseBodyAccessMode string
 
 // GetResourceServer200JSONResponseBodyAuthorizationClientSecretConfigured defines parameters for GetResourceServer.
 type GetResourceServer200JSONResponseBodyAuthorizationClientSecretConfigured bool
@@ -2634,14 +2292,14 @@ type GetResourceServer200JSONResponseBody_AuthorizationDetails_Item struct {
 	AdditionalProperties map[string]string `json:"-"`
 }
 
+// GetResourceServer200JSONResponseBodyAuthorizationModel defines parameters for GetResourceServer.
+type GetResourceServer200JSONResponseBodyAuthorizationModel string
+
 // GetResourceServer200JSONResponseBodyAvailabilityStatus defines parameters for GetResourceServer.
 type GetResourceServer200JSONResponseBodyAvailabilityStatus string
 
 // GetResourceServer200JSONResponseBodyConnectionStatus defines parameters for GetResourceServer.
 type GetResourceServer200JSONResponseBodyConnectionStatus string
-
-// GetResourceServer200JSONResponseBodyScopeRegistryAccountConnectionMode defines parameters for GetResourceServer.
-type GetResourceServer200JSONResponseBodyScopeRegistryAccountConnectionMode string
 
 // GetResourceServer200JSONResponseBodyScopeRegistryScopesGrantMode defines parameters for GetResourceServer.
 type GetResourceServer200JSONResponseBodyScopeRegistryScopesGrantMode string
@@ -2676,61 +2334,6 @@ type ListResourceServerAuthorizationDetails401JSONResponseBodyErrorCode string
 // ListResourceServerAuthorizationDetails403JSONResponseBodyErrorCode defines parameters for ListResourceServerAuthorizationDetails.
 type ListResourceServerAuthorizationDetails403JSONResponseBodyErrorCode string
 
-// CreateConnectionRequestJSONBody defines parameters for CreateConnectionRequest.
-type CreateConnectionRequestJSONBody struct {
-	AuthorizationDetails *[]CreateConnectionRequestJSONBody_AuthorizationDetails_Item `json:"authorizationDetails,omitempty"`
-	Reason               *string                                                      `json:"reason,omitempty"`
-	Scopes               []string                                                     `json:"scopes"`
-}
-
-// CreateConnectionRequestJSONBody_AuthorizationDetails_Item defines parameters for CreateConnectionRequest.
-type CreateConnectionRequestJSONBody_AuthorizationDetails_Item struct {
-	Type                 string            `json:"type"`
-	AdditionalProperties map[string]string `json:"-"`
-}
-
-// CreateConnectionRequest201JSONResponseBody_AuthorizationDetails_Item defines parameters for CreateConnectionRequest.
-type CreateConnectionRequest201JSONResponseBody_AuthorizationDetails_Item struct {
-	Type                 string            `json:"type"`
-	AdditionalProperties map[string]string `json:"-"`
-}
-
-// CreateConnectionRequest201JSONResponseBodyInteractionStatus defines parameters for CreateConnectionRequest.
-type CreateConnectionRequest201JSONResponseBodyInteractionStatus string
-
-// CreateConnectionRequest201JSONResponseBodyInteractionType defines parameters for CreateConnectionRequest.
-type CreateConnectionRequest201JSONResponseBodyInteractionType string
-
-// CreateConnectionRequest201JSONResponseBodyStatus defines parameters for CreateConnectionRequest.
-type CreateConnectionRequest201JSONResponseBodyStatus string
-
-// CreateConnectionRequest401JSONResponseBodyErrorCode defines parameters for CreateConnectionRequest.
-type CreateConnectionRequest401JSONResponseBodyErrorCode string
-
-// CreateConnectionRequest403JSONResponseBodyErrorCode defines parameters for CreateConnectionRequest.
-type CreateConnectionRequest403JSONResponseBodyErrorCode string
-
-// GetConnectionRequest200JSONResponseBody_AuthorizationDetails_Item defines parameters for GetConnectionRequest.
-type GetConnectionRequest200JSONResponseBody_AuthorizationDetails_Item struct {
-	Type                 string            `json:"type"`
-	AdditionalProperties map[string]string `json:"-"`
-}
-
-// GetConnectionRequest200JSONResponseBodyInteractionStatus defines parameters for GetConnectionRequest.
-type GetConnectionRequest200JSONResponseBodyInteractionStatus string
-
-// GetConnectionRequest200JSONResponseBodyInteractionType defines parameters for GetConnectionRequest.
-type GetConnectionRequest200JSONResponseBodyInteractionType string
-
-// GetConnectionRequest200JSONResponseBodyStatus defines parameters for GetConnectionRequest.
-type GetConnectionRequest200JSONResponseBodyStatus string
-
-// GetConnectionRequest401JSONResponseBodyErrorCode defines parameters for GetConnectionRequest.
-type GetConnectionRequest401JSONResponseBodyErrorCode string
-
-// GetConnectionRequest403JSONResponseBodyErrorCode defines parameters for GetConnectionRequest.
-type GetConnectionRequest403JSONResponseBodyErrorCode string
-
 // CreateAgentAuthorizationRequestJSONRequestBody defines body for CreateAgentAuthorizationRequest for application/json ContentType.
 type CreateAgentAuthorizationRequestJSONRequestBody CreateAgentAuthorizationRequestJSONBody
 
@@ -2739,9 +2342,6 @@ type CreateAgentAccessRequestCredentialJSONRequestBody CreateAgentAccessRequestC
 
 // CreateAgentEnrollmentJSONRequestBody defines body for CreateAgentEnrollment for application/json ContentType.
 type CreateAgentEnrollmentJSONRequestBody CreateAgentEnrollmentJSONBody
-
-// CreateConnectionRequestJSONRequestBody defines body for CreateConnectionRequest for application/json ContentType.
-type CreateConnectionRequestJSONRequestBody CreateConnectionRequestJSONBody
 
 // Getter for additional properties for CreateAgentAuthorizationRequestJSONBody_AuthorizationDetails_Item. Returns the specified
 // element and whether it was found
@@ -3337,204 +2937,6 @@ func (a ListResourceServerAuthorizationDetails200JSONResponseBody_Items_Authoriz
 	return json.Marshal(object)
 }
 
-// Getter for additional properties for CreateConnectionRequestJSONBody_AuthorizationDetails_Item. Returns the specified
-// element and whether it was found
-func (a CreateConnectionRequestJSONBody_AuthorizationDetails_Item) Get(fieldName string) (value string, found bool) {
-	if a.AdditionalProperties != nil {
-		value, found = a.AdditionalProperties[fieldName]
-	}
-	return
-}
-
-// Setter for additional properties for CreateConnectionRequestJSONBody_AuthorizationDetails_Item
-func (a *CreateConnectionRequestJSONBody_AuthorizationDetails_Item) Set(fieldName string, value string) {
-	if a.AdditionalProperties == nil {
-		a.AdditionalProperties = make(map[string]string)
-	}
-	a.AdditionalProperties[fieldName] = value
-}
-
-// Override default JSON handling for CreateConnectionRequestJSONBody_AuthorizationDetails_Item to handle AdditionalProperties
-func (a *CreateConnectionRequestJSONBody_AuthorizationDetails_Item) UnmarshalJSON(b []byte) error {
-	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
-	if err != nil {
-		return err
-	}
-
-	if raw, found := object["type"]; found {
-		err = json.Unmarshal(raw, &a.Type)
-		if err != nil {
-			return fmt.Errorf("error reading 'type': %w", err)
-		}
-		delete(object, "type")
-	}
-
-	if len(object) != 0 {
-		a.AdditionalProperties = make(map[string]string)
-		for fieldName, fieldBuf := range object {
-			var fieldVal string
-			err := json.Unmarshal(fieldBuf, &fieldVal)
-			if err != nil {
-				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
-			}
-			a.AdditionalProperties[fieldName] = fieldVal
-		}
-	}
-	return nil
-}
-
-// Override default JSON handling for CreateConnectionRequestJSONBody_AuthorizationDetails_Item to handle AdditionalProperties
-func (a CreateConnectionRequestJSONBody_AuthorizationDetails_Item) MarshalJSON() ([]byte, error) {
-	var err error
-	object := make(map[string]json.RawMessage)
-
-	object["type"], err = json.Marshal(a.Type)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling 'type': %w", err)
-	}
-
-	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
-		}
-	}
-	return json.Marshal(object)
-}
-
-// Getter for additional properties for CreateConnectionRequest201JSONResponseBody_AuthorizationDetails_Item. Returns the specified
-// element and whether it was found
-func (a CreateConnectionRequest201JSONResponseBody_AuthorizationDetails_Item) Get(fieldName string) (value string, found bool) {
-	if a.AdditionalProperties != nil {
-		value, found = a.AdditionalProperties[fieldName]
-	}
-	return
-}
-
-// Setter for additional properties for CreateConnectionRequest201JSONResponseBody_AuthorizationDetails_Item
-func (a *CreateConnectionRequest201JSONResponseBody_AuthorizationDetails_Item) Set(fieldName string, value string) {
-	if a.AdditionalProperties == nil {
-		a.AdditionalProperties = make(map[string]string)
-	}
-	a.AdditionalProperties[fieldName] = value
-}
-
-// Override default JSON handling for CreateConnectionRequest201JSONResponseBody_AuthorizationDetails_Item to handle AdditionalProperties
-func (a *CreateConnectionRequest201JSONResponseBody_AuthorizationDetails_Item) UnmarshalJSON(b []byte) error {
-	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
-	if err != nil {
-		return err
-	}
-
-	if raw, found := object["type"]; found {
-		err = json.Unmarshal(raw, &a.Type)
-		if err != nil {
-			return fmt.Errorf("error reading 'type': %w", err)
-		}
-		delete(object, "type")
-	}
-
-	if len(object) != 0 {
-		a.AdditionalProperties = make(map[string]string)
-		for fieldName, fieldBuf := range object {
-			var fieldVal string
-			err := json.Unmarshal(fieldBuf, &fieldVal)
-			if err != nil {
-				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
-			}
-			a.AdditionalProperties[fieldName] = fieldVal
-		}
-	}
-	return nil
-}
-
-// Override default JSON handling for CreateConnectionRequest201JSONResponseBody_AuthorizationDetails_Item to handle AdditionalProperties
-func (a CreateConnectionRequest201JSONResponseBody_AuthorizationDetails_Item) MarshalJSON() ([]byte, error) {
-	var err error
-	object := make(map[string]json.RawMessage)
-
-	object["type"], err = json.Marshal(a.Type)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling 'type': %w", err)
-	}
-
-	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
-		}
-	}
-	return json.Marshal(object)
-}
-
-// Getter for additional properties for GetConnectionRequest200JSONResponseBody_AuthorizationDetails_Item. Returns the specified
-// element and whether it was found
-func (a GetConnectionRequest200JSONResponseBody_AuthorizationDetails_Item) Get(fieldName string) (value string, found bool) {
-	if a.AdditionalProperties != nil {
-		value, found = a.AdditionalProperties[fieldName]
-	}
-	return
-}
-
-// Setter for additional properties for GetConnectionRequest200JSONResponseBody_AuthorizationDetails_Item
-func (a *GetConnectionRequest200JSONResponseBody_AuthorizationDetails_Item) Set(fieldName string, value string) {
-	if a.AdditionalProperties == nil {
-		a.AdditionalProperties = make(map[string]string)
-	}
-	a.AdditionalProperties[fieldName] = value
-}
-
-// Override default JSON handling for GetConnectionRequest200JSONResponseBody_AuthorizationDetails_Item to handle AdditionalProperties
-func (a *GetConnectionRequest200JSONResponseBody_AuthorizationDetails_Item) UnmarshalJSON(b []byte) error {
-	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
-	if err != nil {
-		return err
-	}
-
-	if raw, found := object["type"]; found {
-		err = json.Unmarshal(raw, &a.Type)
-		if err != nil {
-			return fmt.Errorf("error reading 'type': %w", err)
-		}
-		delete(object, "type")
-	}
-
-	if len(object) != 0 {
-		a.AdditionalProperties = make(map[string]string)
-		for fieldName, fieldBuf := range object {
-			var fieldVal string
-			err := json.Unmarshal(fieldBuf, &fieldVal)
-			if err != nil {
-				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
-			}
-			a.AdditionalProperties[fieldName] = fieldVal
-		}
-	}
-	return nil
-}
-
-// Override default JSON handling for GetConnectionRequest200JSONResponseBody_AuthorizationDetails_Item to handle AdditionalProperties
-func (a GetConnectionRequest200JSONResponseBody_AuthorizationDetails_Item) MarshalJSON() ([]byte, error) {
-	var err error
-	object := make(map[string]json.RawMessage)
-
-	object["type"], err = json.Marshal(a.Type)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling 'type': %w", err)
-	}
-
-	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
-		}
-	}
-	return json.Marshal(object)
-}
-
 // AsGetAgentStatus200JSONResponseBodyAgentHomeSpace0 returns the union data inside the GetAgentStatus200JSONResponseBody_Agent_HomeSpace as a GetAgentStatus200JSONResponseBodyAgentHomeSpace0
 func (t GetAgentStatus200JSONResponseBody_Agent_HomeSpace) AsGetAgentStatus200JSONResponseBodyAgentHomeSpace0() (GetAgentStatus200JSONResponseBodyAgentHomeSpace0, error) {
 	var body GetAgentStatus200JSONResponseBodyAgentHomeSpace0
@@ -4074,14 +3476,6 @@ type ClientInterface interface {
 
 	// ListResourceServerAuthorizationDetails request
 	ListResourceServerAuthorizationDetails(ctx context.Context, resourceServerId string, params *ListResourceServerAuthorizationDetailsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// CreateConnectionRequestWithBody request with any body
-	CreateConnectionRequestWithBody(ctx context.Context, resourceServerId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	CreateConnectionRequest(ctx context.Context, resourceServerId string, body CreateConnectionRequestJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetConnectionRequest request
-	GetConnectionRequest(ctx context.Context, resourceServerId string, requestId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 func (c *Client) GetAgentStatus(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -4218,42 +3612,6 @@ func (c *Client) GetResourceServer(ctx context.Context, resourceServerId string,
 
 func (c *Client) ListResourceServerAuthorizationDetails(ctx context.Context, resourceServerId string, params *ListResourceServerAuthorizationDetailsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListResourceServerAuthorizationDetailsRequest(c.Server, resourceServerId, params)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) CreateConnectionRequestWithBody(ctx context.Context, resourceServerId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewCreateConnectionRequestRequestWithBody(c.Server, resourceServerId, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) CreateConnectionRequest(ctx context.Context, resourceServerId string, body CreateConnectionRequestJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewCreateConnectionRequestRequest(c.Server, resourceServerId, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) GetConnectionRequest(ctx context.Context, resourceServerId string, requestId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetConnectionRequestRequest(c.Server, resourceServerId, requestId)
 	if err != nil {
 		return nil, err
 	}
@@ -4686,94 +4044,6 @@ func NewListResourceServerAuthorizationDetailsRequest(server string, resourceSer
 	return req, nil
 }
 
-// NewCreateConnectionRequestRequest calls the generic CreateConnectionRequest builder with application/json body
-func NewCreateConnectionRequestRequest(server string, resourceServerId string, body CreateConnectionRequestJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewCreateConnectionRequestRequestWithBody(server, resourceServerId, "application/json", bodyReader)
-}
-
-// NewCreateConnectionRequestRequestWithBody generates requests for CreateConnectionRequest with any type of body
-func NewCreateConnectionRequestRequestWithBody(server string, resourceServerId string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "resourceServerId", resourceServerId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/resource-servers/%s/connection-requests", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewGetConnectionRequestRequest generates requests for GetConnectionRequest
-func NewGetConnectionRequestRequest(server string, resourceServerId string, requestId string) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "resourceServerId", resourceServerId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "requestId", requestId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/resource-servers/%s/connection-requests/%s", pathParam0, pathParam1)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -4849,14 +4119,6 @@ type ClientWithResponsesInterface interface {
 
 	// ListResourceServerAuthorizationDetailsWithResponse request
 	ListResourceServerAuthorizationDetailsWithResponse(ctx context.Context, resourceServerId string, params *ListResourceServerAuthorizationDetailsParams, reqEditors ...RequestEditorFn) (*ListResourceServerAuthorizationDetailsResponse, error)
-
-	// CreateConnectionRequestWithBodyWithResponse request with any body
-	CreateConnectionRequestWithBodyWithResponse(ctx context.Context, resourceServerId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateConnectionRequestResponse, error)
-
-	CreateConnectionRequestWithResponse(ctx context.Context, resourceServerId string, body CreateConnectionRequestJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateConnectionRequestResponse, error)
-
-	// GetConnectionRequestWithResponse request
-	GetConnectionRequestWithResponse(ctx context.Context, resourceServerId string, requestId string, reqEditors ...RequestEditorFn) (*GetConnectionRequestResponse, error)
 }
 
 type GetAgentStatusResponse struct {
@@ -5273,7 +4535,6 @@ type ListResourceServersResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *struct {
 		Items []struct {
-			AccessMode    ListResourceServers200JSONResponseBodyItemsAccessMode `json:"accessMode"`
 			Authorization struct {
 				AuthorizationDetailsCatalogEndpoint string                                                                         `json:"authorizationDetailsCatalogEndpoint"`
 				AuthorizationDetailsCatalogScope    string                                                                         `json:"authorizationDetailsCatalogScope"`
@@ -5296,6 +4557,7 @@ type ListResourceServersResponse struct {
 				UserInfoEndpoint                    string                                                                         `json:"userInfoEndpoint"`
 			} `json:"authorization"`
 			AuthorizationDetails []ListResourceServers200JSONResponseBody_Items_AuthorizationDetails_Item `json:"authorizationDetails"`
+			AuthorizationModel   ListResourceServers200JSONResponseBodyItemsAuthorizationModel            `json:"authorizationModel"`
 			Availability         struct {
 				CheckedAt time.Time                                                     `json:"checkedAt"`
 				Status    ListResourceServers200JSONResponseBodyItemsAvailabilityStatus `json:"status"`
@@ -5314,20 +4576,12 @@ type ListResourceServersResponse struct {
 			Identifier  string `json:"identifier"`
 			Links       struct {
 				AuthorizationDetails string `json:"authorizationDetails"`
-				ConnectionRequests   string `json:"connectionRequests"`
 				Self                 string `json:"self"`
 			} `json:"links"`
 			Name                string `json:"name"`
 			OwnerOrganizationId string `json:"ownerOrganizationId"`
 			ResourceUrl         string `json:"resourceUrl"`
 			ScopeRegistry       struct {
-				AccountConnection *struct {
-					AuthorizationDetailsEndpoint *string                                                                       `json:"authorizationDetailsEndpoint,omitempty"`
-					AuthorizationEndpoint        string                                                                        `json:"authorizationEndpoint"`
-					Mode                         ListResourceServers200JSONResponseBodyItemsScopeRegistryAccountConnectionMode `json:"mode"`
-					RevocationEndpoint           *string                                                                       `json:"revocationEndpoint,omitempty"`
-					TokenEndpoint                string                                                                        `json:"tokenEndpoint"`
-				} `json:"accountConnection,omitempty"`
 				Discovery struct {
 					DocumentHash string `json:"documentHash"`
 					Etag         string `json:"etag"`
@@ -5405,7 +4659,6 @@ type GetResourceServerResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		AccessMode    GetResourceServer200JSONResponseBodyAccessMode `json:"accessMode"`
 		Authorization struct {
 			AuthorizationDetailsCatalogEndpoint string                                                                  `json:"authorizationDetailsCatalogEndpoint"`
 			AuthorizationDetailsCatalogScope    string                                                                  `json:"authorizationDetailsCatalogScope"`
@@ -5428,6 +4681,7 @@ type GetResourceServerResponse struct {
 			UserInfoEndpoint                    string                                                                  `json:"userInfoEndpoint"`
 		} `json:"authorization"`
 		AuthorizationDetails []GetResourceServer200JSONResponseBody_AuthorizationDetails_Item `json:"authorizationDetails"`
+		AuthorizationModel   GetResourceServer200JSONResponseBodyAuthorizationModel           `json:"authorizationModel"`
 		Availability         struct {
 			CheckedAt time.Time                                              `json:"checkedAt"`
 			Status    GetResourceServer200JSONResponseBodyAvailabilityStatus `json:"status"`
@@ -5446,20 +4700,12 @@ type GetResourceServerResponse struct {
 		Identifier  string `json:"identifier"`
 		Links       struct {
 			AuthorizationDetails string `json:"authorizationDetails"`
-			ConnectionRequests   string `json:"connectionRequests"`
 			Self                 string `json:"self"`
 		} `json:"links"`
 		Name                string `json:"name"`
 		OwnerOrganizationId string `json:"ownerOrganizationId"`
 		ResourceUrl         string `json:"resourceUrl"`
 		ScopeRegistry       struct {
-			AccountConnection *struct {
-				AuthorizationDetailsEndpoint *string                                                                `json:"authorizationDetailsEndpoint,omitempty"`
-				AuthorizationEndpoint        string                                                                 `json:"authorizationEndpoint"`
-				Mode                         GetResourceServer200JSONResponseBodyScopeRegistryAccountConnectionMode `json:"mode"`
-				RevocationEndpoint           *string                                                                `json:"revocationEndpoint,omitempty"`
-				TokenEndpoint                string                                                                 `json:"tokenEndpoint"`
-			} `json:"accountConnection,omitempty"`
 			Discovery struct {
 				DocumentHash string `json:"documentHash"`
 				Etag         string `json:"etag"`
@@ -5588,136 +4834,6 @@ func (r ListResourceServerAuthorizationDetailsResponse) ContentType() string {
 	return ""
 }
 
-type CreateConnectionRequestResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON201      *struct {
-		AgentId              string                                                                 `json:"agentId"`
-		AuthorizationDetails []CreateConnectionRequest201JSONResponseBody_AuthorizationDetails_Item `json:"authorizationDetails"`
-		CreatedAt            time.Time                                                              `json:"createdAt"`
-		ExpiresAt            time.Time                                                              `json:"expiresAt"`
-		Id                   string                                                                 `json:"id"`
-		Interaction          struct {
-			ExpiresAt time.Time                                                   `json:"expiresAt"`
-			Status    CreateConnectionRequest201JSONResponseBodyInteractionStatus `json:"status"`
-			Type      CreateConnectionRequest201JSONResponseBodyInteractionType   `json:"type"`
-			Url       string                                                      `json:"url"`
-		} `json:"interaction"`
-		Links struct {
-			Self string `json:"self"`
-		} `json:"links"`
-		Reason           string                                           `json:"reason"`
-		ResourceServerId string                                           `json:"resourceServerId"`
-		Scopes           []string                                         `json:"scopes"`
-		Status           CreateConnectionRequest201JSONResponseBodyStatus `json:"status"`
-	}
-	JSON401 *struct {
-		Error struct {
-			Code      CreateConnectionRequest401JSONResponseBodyErrorCode `json:"code"`
-			Details   *map[string]interface{}                             `json:"details,omitempty"`
-			Message   string                                              `json:"message"`
-			RequestId *string                                             `json:"requestId,omitempty"`
-		} `json:"error"`
-	}
-	JSON403 *struct {
-		Error struct {
-			Code      CreateConnectionRequest403JSONResponseBodyErrorCode `json:"code"`
-			Details   *map[string]interface{}                             `json:"details,omitempty"`
-			Message   string                                              `json:"message"`
-			RequestId *string                                             `json:"requestId,omitempty"`
-		} `json:"error"`
-	}
-}
-
-// Status returns HTTPResponse.Status
-func (r CreateConnectionRequestResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r CreateConnectionRequestResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r CreateConnectionRequestResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type GetConnectionRequestResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *struct {
-		AgentId              string                                                              `json:"agentId"`
-		AuthorizationDetails []GetConnectionRequest200JSONResponseBody_AuthorizationDetails_Item `json:"authorizationDetails"`
-		CreatedAt            time.Time                                                           `json:"createdAt"`
-		ExpiresAt            time.Time                                                           `json:"expiresAt"`
-		Id                   string                                                              `json:"id"`
-		Interaction          struct {
-			ExpiresAt time.Time                                                `json:"expiresAt"`
-			Status    GetConnectionRequest200JSONResponseBodyInteractionStatus `json:"status"`
-			Type      GetConnectionRequest200JSONResponseBodyInteractionType   `json:"type"`
-			Url       string                                                   `json:"url"`
-		} `json:"interaction"`
-		Links struct {
-			Self string `json:"self"`
-		} `json:"links"`
-		Reason           string                                        `json:"reason"`
-		ResourceServerId string                                        `json:"resourceServerId"`
-		Scopes           []string                                      `json:"scopes"`
-		Status           GetConnectionRequest200JSONResponseBodyStatus `json:"status"`
-	}
-	JSON401 *struct {
-		Error struct {
-			Code      GetConnectionRequest401JSONResponseBodyErrorCode `json:"code"`
-			Details   *map[string]interface{}                          `json:"details,omitempty"`
-			Message   string                                           `json:"message"`
-			RequestId *string                                          `json:"requestId,omitempty"`
-		} `json:"error"`
-	}
-	JSON403 *struct {
-		Error struct {
-			Code      GetConnectionRequest403JSONResponseBodyErrorCode `json:"code"`
-			Details   *map[string]interface{}                          `json:"details,omitempty"`
-			Message   string                                           `json:"message"`
-			RequestId *string                                          `json:"requestId,omitempty"`
-		} `json:"error"`
-	}
-}
-
-// Status returns HTTPResponse.Status
-func (r GetConnectionRequestResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetConnectionRequestResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r GetConnectionRequestResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
 // GetAgentStatusWithResponse request returning *GetAgentStatusResponse
 func (c *ClientWithResponses) GetAgentStatusWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAgentStatusResponse, error) {
 	rsp, err := c.GetAgentStatus(ctx, reqEditors...)
@@ -5821,32 +4937,6 @@ func (c *ClientWithResponses) ListResourceServerAuthorizationDetailsWithResponse
 		return nil, err
 	}
 	return ParseListResourceServerAuthorizationDetailsResponse(rsp)
-}
-
-// CreateConnectionRequestWithBodyWithResponse request with arbitrary body returning *CreateConnectionRequestResponse
-func (c *ClientWithResponses) CreateConnectionRequestWithBodyWithResponse(ctx context.Context, resourceServerId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateConnectionRequestResponse, error) {
-	rsp, err := c.CreateConnectionRequestWithBody(ctx, resourceServerId, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseCreateConnectionRequestResponse(rsp)
-}
-
-func (c *ClientWithResponses) CreateConnectionRequestWithResponse(ctx context.Context, resourceServerId string, body CreateConnectionRequestJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateConnectionRequestResponse, error) {
-	rsp, err := c.CreateConnectionRequest(ctx, resourceServerId, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseCreateConnectionRequestResponse(rsp)
-}
-
-// GetConnectionRequestWithResponse request returning *GetConnectionRequestResponse
-func (c *ClientWithResponses) GetConnectionRequestWithResponse(ctx context.Context, resourceServerId string, requestId string, reqEditors ...RequestEditorFn) (*GetConnectionRequestResponse, error) {
-	rsp, err := c.GetConnectionRequest(ctx, resourceServerId, requestId, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetConnectionRequestResponse(rsp)
 }
 
 // ParseGetAgentStatusResponse parses an HTTP response from a GetAgentStatusWithResponse call
@@ -6347,7 +5437,6 @@ func ParseListResourceServersResponse(rsp *http.Response) (*ListResourceServersR
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
 			Items []struct {
-				AccessMode    ListResourceServers200JSONResponseBodyItemsAccessMode `json:"accessMode"`
 				Authorization struct {
 					AuthorizationDetailsCatalogEndpoint string                                                                         `json:"authorizationDetailsCatalogEndpoint"`
 					AuthorizationDetailsCatalogScope    string                                                                         `json:"authorizationDetailsCatalogScope"`
@@ -6370,6 +5459,7 @@ func ParseListResourceServersResponse(rsp *http.Response) (*ListResourceServersR
 					UserInfoEndpoint                    string                                                                         `json:"userInfoEndpoint"`
 				} `json:"authorization"`
 				AuthorizationDetails []ListResourceServers200JSONResponseBody_Items_AuthorizationDetails_Item `json:"authorizationDetails"`
+				AuthorizationModel   ListResourceServers200JSONResponseBodyItemsAuthorizationModel            `json:"authorizationModel"`
 				Availability         struct {
 					CheckedAt time.Time                                                     `json:"checkedAt"`
 					Status    ListResourceServers200JSONResponseBodyItemsAvailabilityStatus `json:"status"`
@@ -6388,20 +5478,12 @@ func ParseListResourceServersResponse(rsp *http.Response) (*ListResourceServersR
 				Identifier  string `json:"identifier"`
 				Links       struct {
 					AuthorizationDetails string `json:"authorizationDetails"`
-					ConnectionRequests   string `json:"connectionRequests"`
 					Self                 string `json:"self"`
 				} `json:"links"`
 				Name                string `json:"name"`
 				OwnerOrganizationId string `json:"ownerOrganizationId"`
 				ResourceUrl         string `json:"resourceUrl"`
 				ScopeRegistry       struct {
-					AccountConnection *struct {
-						AuthorizationDetailsEndpoint *string                                                                       `json:"authorizationDetailsEndpoint,omitempty"`
-						AuthorizationEndpoint        string                                                                        `json:"authorizationEndpoint"`
-						Mode                         ListResourceServers200JSONResponseBodyItemsScopeRegistryAccountConnectionMode `json:"mode"`
-						RevocationEndpoint           *string                                                                       `json:"revocationEndpoint,omitempty"`
-						TokenEndpoint                string                                                                        `json:"tokenEndpoint"`
-					} `json:"accountConnection,omitempty"`
 					Discovery struct {
 						DocumentHash string `json:"documentHash"`
 						Etag         string `json:"etag"`
@@ -6487,7 +5569,6 @@ func ParseGetResourceServerResponse(rsp *http.Response) (*GetResourceServerRespo
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			AccessMode    GetResourceServer200JSONResponseBodyAccessMode `json:"accessMode"`
 			Authorization struct {
 				AuthorizationDetailsCatalogEndpoint string                                                                  `json:"authorizationDetailsCatalogEndpoint"`
 				AuthorizationDetailsCatalogScope    string                                                                  `json:"authorizationDetailsCatalogScope"`
@@ -6510,6 +5591,7 @@ func ParseGetResourceServerResponse(rsp *http.Response) (*GetResourceServerRespo
 				UserInfoEndpoint                    string                                                                  `json:"userInfoEndpoint"`
 			} `json:"authorization"`
 			AuthorizationDetails []GetResourceServer200JSONResponseBody_AuthorizationDetails_Item `json:"authorizationDetails"`
+			AuthorizationModel   GetResourceServer200JSONResponseBodyAuthorizationModel           `json:"authorizationModel"`
 			Availability         struct {
 				CheckedAt time.Time                                              `json:"checkedAt"`
 				Status    GetResourceServer200JSONResponseBodyAvailabilityStatus `json:"status"`
@@ -6528,20 +5610,12 @@ func ParseGetResourceServerResponse(rsp *http.Response) (*GetResourceServerRespo
 			Identifier  string `json:"identifier"`
 			Links       struct {
 				AuthorizationDetails string `json:"authorizationDetails"`
-				ConnectionRequests   string `json:"connectionRequests"`
 				Self                 string `json:"self"`
 			} `json:"links"`
 			Name                string `json:"name"`
 			OwnerOrganizationId string `json:"ownerOrganizationId"`
 			ResourceUrl         string `json:"resourceUrl"`
 			ScopeRegistry       struct {
-				AccountConnection *struct {
-					AuthorizationDetailsEndpoint *string                                                                `json:"authorizationDetailsEndpoint,omitempty"`
-					AuthorizationEndpoint        string                                                                 `json:"authorizationEndpoint"`
-					Mode                         GetResourceServer200JSONResponseBodyScopeRegistryAccountConnectionMode `json:"mode"`
-					RevocationEndpoint           *string                                                                `json:"revocationEndpoint,omitempty"`
-					TokenEndpoint                string                                                                 `json:"tokenEndpoint"`
-				} `json:"accountConnection,omitempty"`
 				Discovery struct {
 					DocumentHash string `json:"documentHash"`
 					Etag         string `json:"etag"`
@@ -6662,152 +5736,6 @@ func ParseListResourceServerAuthorizationDetailsResponse(rsp *http.Response) (*L
 				Details   *map[string]interface{}                                            `json:"details,omitempty"`
 				Message   string                                                             `json:"message"`
 				RequestId *string                                                            `json:"requestId,omitempty"`
-			} `json:"error"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseCreateConnectionRequestResponse parses an HTTP response from a CreateConnectionRequestWithResponse call
-func ParseCreateConnectionRequestResponse(rsp *http.Response) (*CreateConnectionRequestResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &CreateConnectionRequestResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest struct {
-			AgentId              string                                                                 `json:"agentId"`
-			AuthorizationDetails []CreateConnectionRequest201JSONResponseBody_AuthorizationDetails_Item `json:"authorizationDetails"`
-			CreatedAt            time.Time                                                              `json:"createdAt"`
-			ExpiresAt            time.Time                                                              `json:"expiresAt"`
-			Id                   string                                                                 `json:"id"`
-			Interaction          struct {
-				ExpiresAt time.Time                                                   `json:"expiresAt"`
-				Status    CreateConnectionRequest201JSONResponseBodyInteractionStatus `json:"status"`
-				Type      CreateConnectionRequest201JSONResponseBodyInteractionType   `json:"type"`
-				Url       string                                                      `json:"url"`
-			} `json:"interaction"`
-			Links struct {
-				Self string `json:"self"`
-			} `json:"links"`
-			Reason           string                                           `json:"reason"`
-			ResourceServerId string                                           `json:"resourceServerId"`
-			Scopes           []string                                         `json:"scopes"`
-			Status           CreateConnectionRequest201JSONResponseBodyStatus `json:"status"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON201 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest struct {
-			Error struct {
-				Code      CreateConnectionRequest401JSONResponseBodyErrorCode `json:"code"`
-				Details   *map[string]interface{}                             `json:"details,omitempty"`
-				Message   string                                              `json:"message"`
-				RequestId *string                                             `json:"requestId,omitempty"`
-			} `json:"error"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest struct {
-			Error struct {
-				Code      CreateConnectionRequest403JSONResponseBodyErrorCode `json:"code"`
-				Details   *map[string]interface{}                             `json:"details,omitempty"`
-				Message   string                                              `json:"message"`
-				RequestId *string                                             `json:"requestId,omitempty"`
-			} `json:"error"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetConnectionRequestResponse parses an HTTP response from a GetConnectionRequestWithResponse call
-func ParseGetConnectionRequestResponse(rsp *http.Response) (*GetConnectionRequestResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetConnectionRequestResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			AgentId              string                                                              `json:"agentId"`
-			AuthorizationDetails []GetConnectionRequest200JSONResponseBody_AuthorizationDetails_Item `json:"authorizationDetails"`
-			CreatedAt            time.Time                                                           `json:"createdAt"`
-			ExpiresAt            time.Time                                                           `json:"expiresAt"`
-			Id                   string                                                              `json:"id"`
-			Interaction          struct {
-				ExpiresAt time.Time                                                `json:"expiresAt"`
-				Status    GetConnectionRequest200JSONResponseBodyInteractionStatus `json:"status"`
-				Type      GetConnectionRequest200JSONResponseBodyInteractionType   `json:"type"`
-				Url       string                                                   `json:"url"`
-			} `json:"interaction"`
-			Links struct {
-				Self string `json:"self"`
-			} `json:"links"`
-			Reason           string                                        `json:"reason"`
-			ResourceServerId string                                        `json:"resourceServerId"`
-			Scopes           []string                                      `json:"scopes"`
-			Status           GetConnectionRequest200JSONResponseBodyStatus `json:"status"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest struct {
-			Error struct {
-				Code      GetConnectionRequest401JSONResponseBodyErrorCode `json:"code"`
-				Details   *map[string]interface{}                          `json:"details,omitempty"`
-				Message   string                                           `json:"message"`
-				RequestId *string                                          `json:"requestId,omitempty"`
-			} `json:"error"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest struct {
-			Error struct {
-				Code      GetConnectionRequest403JSONResponseBodyErrorCode `json:"code"`
-				Details   *map[string]interface{}                          `json:"details,omitempty"`
-				Message   string                                           `json:"message"`
-				RequestId *string                                          `json:"requestId,omitempty"`
 			} `json:"error"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {

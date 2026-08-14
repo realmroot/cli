@@ -61,7 +61,7 @@ func TestEnrollmentAuthRegistersAgentThenWhoamiUsesTheEnrolledIdentity(t *testin
 			return jsonResponse(http.StatusOK, map[string]any{
 				"agent_id": "agent-123", "host_id": "host-123",
 				"approval": map[string]any{
-					"verification_uri_complete": "https://auth.example.com/agent/approve?code=abc",
+					"verification_uri_complete": "https://auth.example.com/agent/enrollments/approve?code=abc",
 					"expires_in":                600, "interval": 1,
 				},
 			}), nil
@@ -142,7 +142,7 @@ func TestEnrollmentAuthRegistersAgentThenWhoamiUsesTheEnrolledIdentity(t *testin
 	if authorization, _ := output.Request.Headers["Authorization"].(string); authorization != "DPoP protocol-token" {
 		t.Fatalf("missing OAuth DPoP token: %q", authorization)
 	}
-	if prompt.uri != "https://auth.example.com/agent/approve?code=abc" {
+	if prompt.uri != "https://auth.example.com/agent/enrollments/approve?code=abc" {
 		t.Fatalf("approval URI = %q", prompt.uri)
 	}
 	if _, err := authenticateHookRequest(whoami, states, client, prompt); err != nil {
@@ -209,7 +209,7 @@ func TestRegisterAgentSharesHostAcrossRuntimes(t *testing.T) {
 		return jsonResponse(http.StatusOK, map[string]any{
 			"agent_id": "agent-" + target.Runtime, "host_id": "host-123",
 			"approval": map[string]any{
-				"verification_uri_complete": "https://auth.example.com/agent/approve?code=" + target.Runtime,
+				"verification_uri_complete": "https://auth.example.com/agent/enrollments/approve?code=" + target.Runtime,
 				"expires_in":                600, "interval": 1,
 			},
 		}), nil
@@ -289,8 +289,8 @@ func testAgentConfiguration() map[string]any {
 		"agent_endpoint":            "https://auth.example.com/api/agent",
 		"agent_token_endpoint":      "https://auth.example.com/api/auth/oauth2/token",
 		"agent_bootstrap_scopes_supported": []string{
-			"agent:read", "resource-servers:read", "authorization-details:read", "connection-requests:read",
-			"connection-requests:write", "access-requests:read", "access-requests:write",
+			"agent:read", "resource-servers:read", "authorization-details:read", "access-requests:read",
+			"access-requests:write",
 		},
 		"endpoints": map[string]any{
 			"register": "https://auth.example.com/api/auth/agent/register",

@@ -13,22 +13,11 @@ import (
 )
 
 var (
-	errConnectionRequested = errors.New("connection requested")
-	errAccessRequested     = errors.New("access requested")
+	errAccessRequested = errors.New("access requested")
 )
 
 type recordingClient struct {
-	connectionRequests int
-	accessRequests     int
-}
-
-func (client *recordingClient) CreateConnectionRequestWithResponse(context.Context, string, realmrootapi.CreateConnectionRequestJSONRequestBody, ...realmrootapi.RequestEditorFn) (*realmrootapi.CreateConnectionRequestResponse, error) {
-	client.connectionRequests++
-	return nil, errConnectionRequested
-}
-
-func (client *recordingClient) GetConnectionRequestWithResponse(context.Context, string, string, ...realmrootapi.RequestEditorFn) (*realmrootapi.GetConnectionRequestResponse, error) {
-	panic("unexpected connection request poll")
+	accessRequests int
 }
 
 func (client *recordingClient) CreateAgentAuthorizationRequestWithResponse(context.Context, realmrootapi.CreateAgentAuthorizationRequestJSONRequestBody, ...realmrootapi.RequestEditorFn) (*realmrootapi.CreateAgentAuthorizationRequestResponse, error) {
@@ -45,8 +34,8 @@ func TestRequestSkipsConnectionForNativeResource(t *testing.T) {
 	if !errors.Is(err, errAccessRequested) {
 		t.Fatalf("Request() error = %v, want access request", err)
 	}
-	if client.connectionRequests != 0 || client.accessRequests != 1 {
-		t.Fatalf("connection requests = %d, access requests = %d", client.connectionRequests, client.accessRequests)
+	if client.accessRequests != 1 {
+		t.Fatalf("access requests = %d", client.accessRequests)
 	}
 }
 
@@ -65,8 +54,8 @@ func TestRequestUsesOneAccessRequestForEveryConnectionState(t *testing.T) {
 			if !errors.Is(err, errAccessRequested) {
 				t.Fatalf("Request() error = %v, want access request", err)
 			}
-			if client.connectionRequests != 0 || client.accessRequests != 1 {
-				t.Fatalf("connection requests = %d, access requests = %d", client.connectionRequests, client.accessRequests)
+			if client.accessRequests != 1 {
+				t.Fatalf("access requests = %d", client.accessRequests)
 			}
 		})
 	}

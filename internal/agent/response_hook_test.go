@@ -53,18 +53,18 @@ func TestProfiledResponseOpensAndPollsAnyInteractiveResource(t *testing.T) {
 		states.state.CredentialSources = nil
 		browser := &browserRecorder{}
 		client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
-			if request.Method != http.MethodGet || request.URL.String() != "https://auth.example.com/api/connection-requests/request-1" {
+			if request.Method != http.MethodGet || request.URL.String() != "https://auth.example.com/api/access-requests/request-1" {
 				t.Fatalf("poll request = %s %s", request.Method, request.URL)
 			}
 			return jsonResponse(200, completedInteraction()), nil
 		})
-		input := profiledInput("https://auth.example.com/api/resource-servers/zpan/connection-requests", pendingInteraction("https://auth.example.com"))
+		input := profiledInput("https://auth.example.com/api/access-requests", pendingInteraction("https://auth.example.com"))
 
 		output, err := handleProfiledResponse(input, browser, states, client, fixedCredentialSourceReference)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if browser.uri != "https://auth.example.com/agent/resource-connection/approve#token=secret" {
+		if browser.uri != "https://auth.example.com/agent/resource-access/approve#token=secret" {
 			t.Fatalf("opened %q", browser.uri)
 		}
 		resource, ok := output.Response.Body.(map[string]any)
@@ -274,26 +274,23 @@ func pendingInteraction(origin string) map[string]any {
 		"id": "request-1", "agentId": "identity-1", "status": "pending", "scopes": []string{"files:read"},
 		"interaction": map[string]any{
 			"type": "user-approval", "status": "pending",
-			"url":       origin + "/agent/resource-connection/approve#token=secret",
+			"url":       origin + "/agent/resource-access/approve#token=secret",
 			"expiresAt": time.Now().Add(time.Minute),
 		},
-		"links": map[string]any{"self": origin + "/api/connection-requests/request-1"},
+		"links": map[string]any{"self": origin + "/api/access-requests/request-1"},
 	}
 }
 
 func pendingAccessInteraction(origin string) map[string]any {
-	body := pendingInteraction(origin)
-	body["links"] = map[string]any{"self": origin + "/api/access-requests/request-1"}
-	body["interaction"].(map[string]any)["url"] = origin + "/agent/resource-access/approve#token=secret"
-	return body
+	return pendingInteraction(origin)
 }
 
 func completedInteraction() map[string]any {
 	return map[string]any{
-		"id": "request-1", "agentId": "identity-1", "status": "connected", "scopes": []string{"files:read"},
+		"id": "request-1", "agentId": "identity-1", "status": "approved", "scopes": []string{"files:read"},
 		"resourceServerId": "zpan", "authorizationDetails": []map[string]any{{"type": "workspace", "identifier": "workspace-1"}},
 		"interaction": map[string]any{"type": "user-approval", "status": "completed", "url": nil, "expiresAt": nil},
-		"links":       map[string]any{"self": "https://auth.example.com/api/connection-requests/request-1"},
+		"links":       map[string]any{"self": "https://auth.example.com/api/access-requests/request-1"},
 	}
 }
 
