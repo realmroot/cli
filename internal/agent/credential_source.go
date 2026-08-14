@@ -134,23 +134,30 @@ func handleCredentialSource(
 		if err != nil {
 			return credentialSourceOutput{}, err
 		}
-		offer := reference.credential
-		token, err := issueTargetCredential(
-			ctx, client, states, reference, offer, input.Proof,
-		)
-		if err != nil {
+		proofTarget := reference.credential.ProofTarget
+		var token targetTokenResponse
+		for {
+			token, err = issueTargetCredential(ctx, client, states, reference, reference.credential, input.Proof)
+			if err == nil {
+				break
+			}
 			var challenge *dpopNonceChallenge
 			if errors.As(err, &challenge) {
 				return credentialSourceOutput{Challenge: &credentialSourceChallenge{
 					Type: "dpop-nonce", Nonce: challenge.nonce,
 				}}, nil
 			}
-			if terminalCredentialPermissionError(err) {
-				if removeErr := states.RemoveCredentialOffer(reference); removeErr != nil {
-					return credentialSourceOutput{}, fmt.Errorf("remove invalid Resource credential offer: %w", removeErr)
-				}
+			if !terminalCredentialPermissionError(err) {
+				return credentialSourceOutput{}, err
 			}
-			return credentialSourceOutput{}, err
+			if removeErr := states.RemoveCredentialOffer(reference); removeErr != nil {
+				return credentialSourceOutput{}, fmt.Errorf("remove invalid Resource credential offer: %w", removeErr)
+			}
+			next, findErr := states.FindCredentialOffer(input.Reference, runtime, input.Scopes)
+			if findErr != nil || next.credential.ProofTarget != proofTarget {
+				return credentialSourceOutput{}, err
+			}
+			reference = next
 		}
 		return credentialSourceOutput{Credential: &credentialSourceCredential{
 			AccessToken: token.AccessToken,
@@ -346,29 +353,7 @@ func issueTargetCredential(
 			return targetTokenResponse{}, err
 		}
 	}
-	requestProof, err := signDPoPProof(
-		protocol.PrivateKey,
-		http.MethodPost,
-		offer.CredentialEndpoint,
-		protocol.AccessToken,
-		time.Now(),
-	)
-	if err != nil {
-		return targetTokenResponse{}, err
-	}
-	var token targetTokenResponse
-	responseHeaders, err := requestJSONHeadersResponse(
-		ctx,
-		client,
-		http.MethodPost,
-		offer.CredentialEndpoint,
-		map[string]string{
-			"Authorization": "DPoP " + protocol.AccessToken,
-			"DPoP":          requestProof,
-		},
-		map[string]any{"proof": map[string]any{"type": "dpop+jwt", "value": targetProof}},
-		&token,
-	)
+	token, responseHeaders, err := requestTargetCredential(ctx, client, protocol, offer, targetProof)
 	if err != nil {
 		if challenge, ok := realmrootDPoPNonceChallenge(err); ok {
 			return targetTokenResponse{}, challenge
@@ -386,6 +371,71 @@ func issueTargetCredential(
 		return targetTokenResponse{}, errors.New("Realmroot returned an invalid target API access token")
 	}
 	return token, nil
+}
+
+func requestTargetCredential(
+	ctx context.Context,
+	client httpDoer,
+	protocol dpopCredential,
+	offer dpopCredential,
+	targetProof string,
+) (targetTokenResponse, http.Header, error) {
+	for attempt := 0; ; attempt++ {
+		requestProof, err := signDPoPProof(
+			protocol.PrivateKey,
+			http.MethodPost,
+			offer.CredentialEndpoint,
+			protocol.AccessToken,
+			time.Now(),
+		)
+		if err != nil {
+			return targetTokenResponse{}, nil, err
+		}
+		var token targetTokenResponse
+		responseHeaders, err := requestJSONHeadersResponse(
+			ctx,
+			client,
+			http.MethodPost,
+			offer.CredentialEndpoint,
+			map[string]string{
+				"Authorization": "DPoP " + protocol.AccessToken,
+				"DPoP":          requestProof,
+			},
+			map[string]any{"proof": map[string]any{"type": "dpop+jwt", "value": targetProof}},
+			&token,
+		)
+		if err == nil {
+			return token, responseHeaders, nil
+		}
+		if attempt >= 2 || !providerRefreshInProgress(err) {
+			return targetTokenResponse{}, nil, err
+		}
+		if err := waitForCredentialRetry(ctx, time.Second); err != nil {
+			return targetTokenResponse{}, nil, err
+		}
+	}
+}
+
+func providerRefreshInProgress(err error) bool {
+	var responseErr *httpResponseError
+	if !errors.As(err, &responseErr) || responseErr.StatusCode != http.StatusServiceUnavailable {
+		return false
+	}
+	var body struct {
+		Error string `json:"error"`
+	}
+	return json.Unmarshal([]byte(responseErr.Body), &body) == nil && body.Error == "temporarily_unavailable"
+}
+
+func waitForCredentialRetry(ctx context.Context, duration time.Duration) error {
+	timer := time.NewTimer(duration)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 func reusableInternalProtocolCredential(state agentState, requiredScopes []string) (dpopCredential, bool) {

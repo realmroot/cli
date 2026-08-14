@@ -275,7 +275,11 @@ func (s *Service) StoreContext(resourceIndicator string, details []map[string]an
 	if contexts.Items == nil {
 		contexts.Items = make(map[string][]map[string]any)
 	}
-	contexts.Items[resourceIndicator] = cloneAuthorizationDetails(details)
+	if len(details) == 0 {
+		delete(contexts.Items, resourceIndicator)
+	} else {
+		contexts.Items[resourceIndicator] = cloneAuthorizationDetails(details)
+	}
 	data, err := json.MarshalIndent(contexts, "", "  ")
 	if err != nil {
 		return err
@@ -305,6 +309,10 @@ func (s *Service) StoreContext(resourceIndicator string, details []map[string]an
 		return err
 	}
 	return os.Rename(temporaryPath, path)
+}
+
+func (s *Service) ClearContext(resourceIndicator string) error {
+	return s.StoreContext(resourceIndicator, nil)
 }
 
 func (s *Service) BindingForResource(resourceIndicator string) (CredentialBinding, error) {
@@ -646,57 +654,41 @@ func (s *Service) activeBinding(resourceIndicator string) (CredentialBinding, er
 	if err != nil {
 		return CredentialBinding{}, err
 	}
-	var bindings activeBindings
-	if err := json.Unmarshal(data, &bindings); err == nil && bindings.Version == 2 {
-		binding := bindings.Items[resourceIndicator]
-		if binding.Reference == "" {
-			return CredentialBinding{}, os.ErrNotExist
-		}
-		return CredentialBinding{Reference: binding.Reference, Scopes: append([]string(nil), binding.Scopes...)}, nil
+	var version struct {
+		Version int `json:"version"`
 	}
-	var legacy struct {
-		Version int               `json:"version"`
-		Items   map[string]string `json:"items"`
+	if err := json.Unmarshal(data, &version); err != nil {
+		return CredentialBinding{}, fmt.Errorf("decode active credential bindings version: %w", err)
 	}
-	if err := json.Unmarshal(data, &legacy); err != nil {
-		return CredentialBinding{}, fmt.Errorf("decode active credential bindings: %w", err)
-	}
-	if legacy.Version != 1 {
+	if version.Version != 2 {
 		return CredentialBinding{}, errors.New("active credential bindings have an unsupported version")
 	}
-	reference := legacy.Items[resourceIndicator]
-	if reference == "" {
+	var bindings activeBindings
+	if err := json.Unmarshal(data, &bindings); err != nil {
+		return CredentialBinding{}, fmt.Errorf("decode active credential bindings: %w", err)
+	}
+	binding := bindings.Items[resourceIndicator]
+	if binding.Reference == "" {
 		return CredentialBinding{}, os.ErrNotExist
 	}
-	return CredentialBinding{Reference: reference}, nil
+	return CredentialBinding{Reference: binding.Reference, Scopes: append([]string(nil), binding.Scopes...)}, nil
 }
 
 func (s *Service) storeActiveBinding(resourceIndicator string, binding CredentialBinding) error {
 	path := filepath.Join(s.states.root, "bindings.json")
 	bindings := activeBindings{Version: 2, Items: map[string]activeCredentialBinding{}}
 	if data, err := os.ReadFile(path); err == nil {
-		var stored struct {
+		var version struct {
 			Version int `json:"version"`
 		}
-		if err := json.Unmarshal(data, &stored); err != nil {
-			return fmt.Errorf("decode active credential bindings: %w", err)
+		if err := json.Unmarshal(data, &version); err != nil {
+			return fmt.Errorf("decode active credential bindings version: %w", err)
 		}
-		if stored.Version == 2 {
-			if err := json.Unmarshal(data, &bindings); err != nil {
-				return fmt.Errorf("decode active credential bindings: %w", err)
-			}
-		} else if stored.Version == 1 {
-			var legacy struct {
-				Items map[string]string `json:"items"`
-			}
-			if err := json.Unmarshal(data, &legacy); err != nil {
-				return fmt.Errorf("decode active credential bindings: %w", err)
-			}
-			for resource, reference := range legacy.Items {
-				bindings.Items[resource] = activeCredentialBinding{Reference: reference}
-			}
-		} else {
+		if version.Version != 2 {
 			return errors.New("active credential bindings have an unsupported version")
+		}
+		if err := json.Unmarshal(data, &bindings); err != nil {
+			return fmt.Errorf("decode active credential bindings: %w", err)
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err

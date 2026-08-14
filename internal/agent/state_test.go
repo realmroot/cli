@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -203,48 +202,13 @@ func TestFileStateStoreRejectsLegacyProtocolCredential(t *testing.T) {
 	}
 }
 
-func TestFileStateStoreMigratesObsoleteCredentialsAndPreservesIdentity(t *testing.T) {
-	for _, version := range []int{14, 15} {
-		t.Run(fmt.Sprintf("version-%d", version), func(t *testing.T) {
-			store := &fileStateStore{root: t.TempDir()}
-			target := agentTarget{
-				API: "realmroot-local", Profile: "default", Runtime: defaultAgentRuntime,
-				Origin: "https://auth.example.com", Issuer: "https://auth.example.com/api/auth",
-			}
-			credential := testCredential(t, "", time.Time{})
-			state := newCredentialState(t, credential).state
-			state.Version = version
-			path := store.path(target)
-			if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-				t.Fatal(err)
-			}
-			encoded, err := json.Marshal(state)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(path, encoded, 0o600); err != nil {
-				t.Fatal(err)
-			}
-
-			migrated, err := store.Load(target)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if migrated.Version != agentStateVersion || migrated.Identity == nil || len(migrated.CredentialSources) != 0 || migrated.ProtocolCredential != nil {
-				t.Fatalf("migrated state = %#v", migrated)
-			}
-		})
-	}
-}
-
-func TestFileStateStoreAddsEnrollmentIdempotencyWithoutDroppingCurrentCredentials(t *testing.T) {
+func TestFileStateStoreRejectsPreviousStateVersionsWithoutMigration(t *testing.T) {
 	store := &fileStateStore{root: t.TempDir()}
 	target := agentTarget{
 		Runtime: defaultAgentRuntime, Origin: "https://auth.example.com", Issuer: "https://auth.example.com/api/auth",
 	}
 	state := newCredentialState(t, testCredential(t, "", time.Time{})).state
 	state.Version = 16
-	state.EnrollmentIdempotencyKey = ""
 	path := store.path(target)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
@@ -257,13 +221,40 @@ func TestFileStateStoreAddsEnrollmentIdempotencyWithoutDroppingCurrentCredential
 		t.Fatal(err)
 	}
 
-	migrated, err := store.Load(target)
+	if _, err := store.Load(target); err == nil || !strings.Contains(err.Error(), "unsupported Agent state version 16") {
+		t.Fatalf("previous Agent state was not rejected: %v", err)
+	}
+}
+
+func TestFileStateStoreRejectsUnknownCurrentStateFields(t *testing.T) {
+	store := &fileStateStore{root: t.TempDir()}
+	target := agentTarget{
+		Runtime: defaultAgentRuntime, Origin: "https://auth.example.com", Issuer: "https://auth.example.com/api/auth",
+	}
+	state := newCredentialState(t, testCredential(t, "", time.Time{})).state
+	encoded, err := json.Marshal(state)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if migrated.EnrollmentIdempotencyKey == "" || migrated.ProtocolCredential == nil ||
-		len(migrated.CredentialSources) != 1 {
-		t.Fatalf("migrated state = %#v", migrated)
+	var document map[string]any
+	if err := json.Unmarshal(encoded, &document); err != nil {
+		t.Fatal(err)
+	}
+	document["platform_credential"] = map[string]any{"access_token": "obsolete"}
+	encoded, err = json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := store.path(target)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, encoded, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := store.Load(target); err == nil || !strings.Contains(err.Error(), "unknown field") {
+		t.Fatalf("unknown Agent state field was not rejected: %v", err)
 	}
 }
 

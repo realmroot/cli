@@ -39,6 +39,8 @@ type Broker struct {
 	temporaryDirectory string
 	sessionToken       string
 	resolveScopes      scopeResolver
+	unresolvedScopes   [][]string
+	scopeMu            sync.RWMutex
 	cloudflareSession  cloudflareAssetSession
 	cloudflareMu       sync.RWMutex
 }
@@ -245,6 +247,9 @@ func (b *Broker) realmrootRequest(request *http.Request, target string) (*http.R
 	}
 	scopes, err := b.resolveScopes(b.reference, alternatives)
 	if errors.Is(err, os.ErrNotExist) || sameStringSet(scopes, b.scopes) {
+		b.scopeMu.Lock()
+		b.unresolvedScopes = cloneScopeAlternatives(alternatives)
+		b.scopeMu.Unlock()
 		return result, nil
 	}
 	if err != nil {
@@ -253,6 +258,20 @@ func (b *Broker) realmrootRequest(request *http.Request, target string) (*http.R
 	}
 	result.Body.Close()
 	return b.authenticatedRequest(request, target, scopes, body)
+}
+
+func (b *Broker) UnresolvedScopeAlternatives() [][]string {
+	b.scopeMu.RLock()
+	defer b.scopeMu.RUnlock()
+	return cloneScopeAlternatives(b.unresolvedScopes)
+}
+
+func cloneScopeAlternatives(values [][]string) [][]string {
+	result := make([][]string, len(values))
+	for index, value := range values {
+		result[index] = append([]string(nil), value...)
+	}
+	return result
 }
 
 func (b *Broker) authenticatedRequest(request *http.Request, target string, scopes []string, body func() (io.ReadCloser, error)) (*http.Response, error) {

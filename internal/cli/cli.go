@@ -143,7 +143,8 @@ func (a *App) execCommand() *cobra.Command {
 			}
 			runner := execution.NewRunner(service, httpClient, command.InOrStdin(), a.stdout, a.stderr)
 			return runner.Run(command.Context(), server, integrations, args, execution.RunOptions{
-				AuthorizationDetails: selected,
+				AuthorizationDetails:      selected,
+				ExactAuthorizationContext: true,
 			})
 		},
 	}
@@ -306,8 +307,8 @@ func (a *App) toolboxCommand() *cobra.Command {
 			if len(args) >= 2 && args[1] == "context" {
 				return a.contextCommand(ctx, agentService, catalogClient, args[0], args[2:])
 			}
-			if a.discoveryOptions().active() {
-				return errors.New("--search, --scope, and --all apply only to a Resource Server overview")
+			if a.search != "" || a.all {
+				return errors.New("--search and --all apply only to a Resource Server overview")
 			}
 			return a.runRestish(ctx, agentService, catalogClient, args)
 		},
@@ -320,7 +321,7 @@ func (a *App) toolboxCommand() *cobra.Command {
 	command.Flags().String("timeout", "", "request timeout, such as 30s")
 	command.Flags().Bool("include", false, "include response headers")
 	command.Flags().String("search", "", "find operations by command, summary, method, path, or operation ID")
-	command.Flags().String("scope", "", "find operations requiring an exact scope")
+	command.Flags().String("scope", "", "filter an overview or select an exact published scope for an operation")
 	command.Flags().String("context", "", "Resource Server Context name for this operation")
 	command.Flags().Bool("all", false, "show the complete Resource Server inventory")
 	command.Flags().Bool("no-browser", false, "do not open controller approval pages")
@@ -617,6 +618,8 @@ func (a *App) showResourceServer(ctx context.Context, service *agent.Service, cl
 		binding, bindErr = service.BindingForAuthorizationContextAllAuthority(server.ResourceURL, selected)
 	} else if len(details) == 1 {
 		binding, bindErr = service.BindingForAuthorizationContextAllAuthority(server.ResourceURL, []map[string]any{details[0].AuthorizationDetail})
+	} else if len(server.AuthorizationDetails) == 0 {
+		binding, bindErr = service.BindingForAuthorizationContextAllAuthority(server.ResourceURL, nil)
 	} else {
 		binding, bindErr = service.BindingForResource(server.ResourceURL)
 	}
@@ -832,7 +835,7 @@ func (a *App) runRestish(ctx context.Context, service *agent.Service, client *ca
 				return err
 			}
 		}
-		binding, bindingErr := resolveOperationCredentialBinding(service, server, inspection, args[1:], selected)
+		binding, bindingErr := resolveOperationCredentialBinding(service, server, inspection, args[1:], selected, a.scope)
 		if bindingErr != nil {
 			return bindingErr
 		}

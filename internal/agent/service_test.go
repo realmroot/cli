@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -60,6 +61,28 @@ func TestSelectedContextIsIndependentFromCredentialBindings(t *testing.T) {
 	}
 	if _, err := service.activeBinding(resource); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("Context selection changed credential binding: %v", err)
+	}
+}
+
+func TestClearContextRemovesOnlyTheSelectedResource(t *testing.T) {
+	service, resource := serviceWithCredentialSources(t, map[string]credentialSource{
+		testCredentialSourceReference: sourceWithScopes(t, "workspace-1", []string{"files:read"}),
+	})
+	otherResource := "https://api.example.com/other"
+	if err := service.StoreContext(resource, []map[string]any{{"type": "workspace", "identifier": "workspace-1"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.StoreContext(otherResource, []map[string]any{{"type": "account", "identifier": "account-1"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.ClearContext(resource); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.SelectedContext(resource); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("cleared Context error = %v", err)
+	}
+	if _, err := service.SelectedContext(otherResource); err != nil {
+		t.Fatalf("unrelated Context was removed: %v", err)
 	}
 }
 
@@ -281,6 +304,16 @@ func TestExecutionBindingReportsMissingAndInvalidAuthorityState(t *testing.T) {
 		}
 		if _, err := service.ExecutionBinding(resource, nil); err == nil {
 			t.Fatal("invalid active binding was accepted")
+		}
+	})
+
+	t.Run("previous active binding version", func(t *testing.T) {
+		service, resource := serviceWithCredentialSources(t, map[string]credentialSource{
+			testCredentialSourceReference: sourceWithScopes(t, "workspace-1", []string{"files:read"}),
+		})
+		writeActiveBindings(t, service, 1, map[string]any{resource: testCredentialSourceReference})
+		if _, err := service.ExecutionBinding(resource, nil); err == nil || !strings.Contains(err.Error(), "unsupported version") {
+			t.Fatalf("previous active binding version was not rejected: %v", err)
 		}
 	})
 

@@ -319,6 +319,45 @@ func TestCredentialSourceRemovesOnlyTerminallyRejectedOffer(t *testing.T) {
 	}
 }
 
+func TestCredentialSourceRetriesAnotherMatchingOfferAfterTerminalRejection(t *testing.T) {
+	staleOffer := testCredential(t, "", time.Time{})
+	validOffer := staleOffer
+	validOffer.CredentialEndpoint = "https://auth.example.com/api/agent/access-requests/valid/credentials"
+	states := newCredentialState(t, staleOffer)
+	source := states.state.CredentialSources[testCredentialSourceReference]
+	source.Offers = append(source.Offers, validOffer)
+	states.state.CredentialSources[testCredentialSourceReference] = source
+	requests := 0
+	client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		requests++
+		if request.URL.String() == staleOffer.CredentialEndpoint {
+			return jsonResponse(http.StatusForbidden, map[string]any{"error": "insufficient_scope"}), nil
+		}
+		if request.URL.String() != validOffer.CredentialEndpoint {
+			t.Fatalf("credential request = %s", request.URL)
+		}
+		return jsonResponse(http.StatusOK, map[string]any{
+			"accessToken": "target-token", "tokenType": "DPoP", "expiresAt": time.Now().Add(time.Minute),
+			"resourceIndicator": validOffer.ResourceIndicator, "authorizationDetails": validOffer.AuthorizationDetails,
+			"scopes": validOffer.Scopes,
+		}), nil
+	})
+
+	output, err := handleCredentialSource(context.Background(), credentialSourceInput{
+		Action: "issue", Reference: testCredentialSourceReference, Scopes: staleOffer.Scopes, Proof: "proof",
+	}, states, client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if requests != 2 || output.Credential == nil || output.Credential.AccessToken != "target-token" {
+		t.Fatalf("requests = %d, credential = %#v", requests, output.Credential)
+	}
+	remaining := states.state.CredentialSources[testCredentialSourceReference].Offers
+	if len(remaining) != 1 || !sameCredentialOffer(remaining[0], validOffer) {
+		t.Fatalf("remaining offers = %#v", remaining)
+	}
+}
+
 func TestCredentialSourceRetainsBindingAfterLastOfferIsRejected(t *testing.T) {
 	offer := testCredential(t, "", time.Time{})
 	states := newCredentialState(t, offer)
@@ -352,7 +391,9 @@ func TestCredentialSourceRetainsBindingAfterLastOfferIsRejected(t *testing.T) {
 func TestCredentialSourceRetainsOfferAfterRetryableFailure(t *testing.T) {
 	offer := testCredential(t, "", time.Time{})
 	states := newCredentialState(t, offer)
+	requests := 0
 	client := roundTripFunc(func(*http.Request) (*http.Response, error) {
+		requests++
 		return jsonResponse(http.StatusServiceUnavailable, map[string]any{"error": "temporarily_unavailable"}), nil
 	})
 
@@ -364,6 +405,36 @@ func TestCredentialSourceRetainsOfferAfterRetryableFailure(t *testing.T) {
 	}
 	if len(states.state.CredentialSources[testCredentialSourceReference].Offers) != 1 {
 		t.Fatal("retryable failure removed the stored offer")
+	}
+	if requests != 3 {
+		t.Fatalf("requests = %d, want 3", requests)
+	}
+}
+
+func TestCredentialSourceRetriesConcurrentProviderRefresh(t *testing.T) {
+	offer := testCredential(t, "", time.Time{})
+	states := newCredentialState(t, offer)
+	requests := 0
+	client := roundTripFunc(func(*http.Request) (*http.Response, error) {
+		requests++
+		if requests == 1 {
+			return jsonResponse(http.StatusServiceUnavailable, map[string]any{"error": "temporarily_unavailable"}), nil
+		}
+		return jsonResponse(http.StatusCreated, map[string]any{
+			"accessToken": "target-token", "tokenType": "DPoP", "expiresAt": time.Now().Add(time.Minute),
+			"resourceIndicator": offer.ResourceIndicator, "authorizationDetails": offer.AuthorizationDetails,
+			"scopes": offer.Scopes,
+		}), nil
+	})
+
+	output, err := handleCredentialSource(context.Background(), credentialSourceInput{
+		Action: "issue", Reference: testCredentialSourceReference, Scopes: offer.Scopes, Proof: "proof",
+	}, states, client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if requests != 2 || output.Credential == nil || output.Credential.AccessToken != "target-token" {
+		t.Fatalf("requests = %d, credential = %#v", requests, output.Credential)
 	}
 }
 

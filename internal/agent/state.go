@@ -78,7 +78,6 @@ type agentState struct {
 	Identity                 *stableIdentity             `json:"identity,omitempty"`
 	CredentialSources        map[string]credentialSource `json:"credential_sources,omitempty"`
 	ProtocolCredential       *dpopCredential             `json:"protocol_credential,omitempty"`
-	LegacyPlatformCredential *dpopCredential             `json:"platform_credential,omitempty"`
 }
 
 type cachedAgentConfiguration struct {
@@ -291,34 +290,20 @@ func (s *fileStateStore) loadPath(path string) (agentState, error) {
 	if err != nil {
 		return agentState{}, fmt.Errorf("read Agent state: %w", err)
 	}
+	var version struct {
+		Version int `json:"version"`
+	}
+	if err := json.Unmarshal(data, &version); err != nil {
+		return agentState{}, fmt.Errorf("decode Agent state version: %w", err)
+	}
+	if version.Version != agentStateVersion {
+		return agentState{}, fmt.Errorf("unsupported Agent state version %d", version.Version)
+	}
+	decoder := json.NewDecoder(strings.NewReader(string(data)))
+	decoder.DisallowUnknownFields()
 	var state agentState
-	if err := json.Unmarshal(data, &state); err != nil {
+	if err := decoder.Decode(&state); err != nil {
 		return agentState{}, fmt.Errorf("decode Agent state: %w", err)
-	}
-	if state.Version == 14 || state.Version == 15 {
-		state.Version = agentStateVersion
-		state.CredentialSources = nil
-		state.ProtocolCredential = nil
-		state.EnrollmentIdempotencyKey, err = newEnrollmentIdempotencyKey()
-		if err != nil {
-			return agentState{}, fmt.Errorf("migrate Agent enrollment idempotency key: %w", err)
-		}
-		if err := s.updatePath(path, state); err != nil {
-			return agentState{}, fmt.Errorf("migrate Agent state: %w", err)
-		}
-	}
-	if state.Version == 16 {
-		state.Version = agentStateVersion
-		state.EnrollmentIdempotencyKey, err = newEnrollmentIdempotencyKey()
-		if err != nil {
-			return agentState{}, fmt.Errorf("migrate Agent enrollment idempotency key: %w", err)
-		}
-		if state.ProtocolCredential != nil && len(state.ProtocolCredential.Scopes) == 0 {
-			state.ProtocolCredential = nil
-		}
-		if err := s.updatePath(path, state); err != nil {
-			return agentState{}, fmt.Errorf("migrate Agent state: %w", err)
-		}
 	}
 	return state, nil
 }
@@ -602,21 +587,15 @@ func (s *fileStateStore) walkStates(visit func(path string, state agentState) er
 		if err != nil {
 			return err
 		}
-		var state agentState
-		if err := json.Unmarshal(data, &state); err != nil {
+		var version struct {
+			Version int `json:"version"`
+		}
+		if err := json.Unmarshal(data, &version); err != nil || version.Version != agentStateVersion {
 			return nil
 		}
-		if state.Version > 0 &&
-			state.Version < agentStateVersion &&
-			state.Issuer != "" &&
-			state.Runtime != "" {
-			state, err = s.loadPath(path)
-			if err != nil {
-				return err
-			}
-		}
-		if state.Version != agentStateVersion {
-			return nil
+		state, err := s.loadPath(path)
+		if err != nil {
+			return err
 		}
 		if err := validateAgentStateCredentials(state); err != nil {
 			return err
@@ -709,9 +688,6 @@ func validateAgentStateCredentials(state agentState) error {
 				return errors.New("Agent state credential offers must not contain target key or token material")
 			}
 		}
-	}
-	if state.LegacyPlatformCredential != nil {
-		return errors.New("Agent state contains a legacy platform credential")
 	}
 	if state.ProtocolCredential != nil {
 		credential := state.ProtocolCredential

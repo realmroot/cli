@@ -25,7 +25,8 @@ type Runner struct {
 }
 
 type RunOptions struct {
-	AuthorizationDetails []map[string]any
+	AuthorizationDetails      []map[string]any
+	ExactAuthorizationContext bool
 }
 
 func NewRunner(service *agent.Service, client *http.Client, stdin io.Reader, stdout, stderr io.Writer) *Runner {
@@ -40,7 +41,12 @@ func (r *Runner) Run(ctx context.Context, server catalog.ResourceServer, integra
 	if err != nil {
 		return err
 	}
-	binding, err := r.service.ExecutionBinding(server.ResourceURL, options.AuthorizationDetails)
+	var binding agent.CredentialBinding
+	if options.ExactAuthorizationContext {
+		binding, _, err = r.service.BindingForAuthorizationContext(server.ResourceURL, options.AuthorizationDetails)
+	} else {
+		binding, err = r.service.ExecutionBinding(server.ResourceURL, options.AuthorizationDetails)
+	}
 	if err != nil {
 		return fmt.Errorf("load selected %s Context authority: %w; inspect Contexts with `realmroot toolbox %s context` or request access with `realmroot agent request`", server.CommandName, err, server.CommandName)
 	}
@@ -116,15 +122,34 @@ func (r *Runner) Run(ctx context.Context, server catalog.ResourceServer, integra
 	}
 	var exit *exec.ExitError
 	if errors.As(err, &exit) {
-		return &ExitError{Code: exit.ExitCode()}
+		return &ExitError{
+			Code: exit.ExitCode(), ResourceServer: server.CommandName,
+			RequiredScopeAlternatives: broker.UnresolvedScopeAlternatives(),
+		}
 	}
 	return err
 }
 
-type ExitError struct{ Code int }
+type ExitError struct {
+	Code                      int
+	ResourceServer            string
+	RequiredScopeAlternatives [][]string
+}
 
 func (e *ExitError) Error() string {
-	return fmt.Sprintf("native command exited with status %d", e.Code)
+	message := fmt.Sprintf("native command exited with status %d", e.Code)
+	if len(e.RequiredScopeAlternatives) == 0 {
+		return message
+	}
+	commands := make([]string, 0, len(e.RequiredScopeAlternatives))
+	for _, scopes := range e.RequiredScopeAlternatives {
+		arguments := []string{"realmroot agent request", "--resource-server", e.ResourceServer}
+		for _, scope := range scopes {
+			arguments = append(arguments, "--scope", scope)
+		}
+		commands = append(commands, "`"+strings.Join(arguments, " ")+"`")
+	}
+	return message + "; request additional authority with " + strings.Join(commands, " or ")
 }
 func (e *ExitError) ExitCode() int { return e.Code }
 
