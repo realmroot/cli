@@ -192,7 +192,14 @@ func (a *App) parseExecFlags(args []string) ([]string, execOptions, error) {
 }
 
 func (a *App) agentCommand() *cobra.Command {
-	command := &cobra.Command{Use: "agent", Short: "Manage this stable Agent identity and its Resource access"}
+	command := &cobra.Command{
+		Use:   "agent",
+		Short: "Manage this stable Agent identity and its Resource access",
+		Args:  cobra.NoArgs,
+		RunE: func(command *cobra.Command, _ []string) error {
+			return command.Help()
+		},
+	}
 	var username string
 	var nickname string
 	enroll := &cobra.Command{

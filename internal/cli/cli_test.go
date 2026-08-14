@@ -85,6 +85,19 @@ func TestVersionCommandReportsBuildInformation(t *testing.T) {
 	}
 }
 
+func TestAgentCommandRejectsUnsupportedSubcommands(t *testing.T) {
+	// [spec: cli/invalid-command]
+	var stdout, stderr bytes.Buffer
+	command := New(&stdout, &stderr)
+	command.SetArgs([]string{"agent", "status"})
+	if err := command.Execute(); err == nil || !strings.Contains(err.Error(), "unknown command \"status\"") {
+		t.Fatalf("unsupported Agent command error = %v", err)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("unsupported Agent command printed successful output: %q", stdout.String())
+	}
+}
+
 func TestToolboxHelpDoesNotCallRealmroot(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	command := New(&stdout, &stderr)

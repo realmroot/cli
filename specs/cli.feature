@@ -7,6 +7,12 @@ Feature: Realmroot Toolbox command line
     And release builds may also report their source commit and build time
     And JSON output uses stable version, commit, and build time fields
 
+  @journey:invalid-command @entrypoint:agent
+  Scenario: Reject an unsupported Agent command
+    When the Agent runs an unsupported command such as "realmroot agent status"
+    Then Toolbox exits with an error
+    And it does not present command help as a successful result
+
   @journey:agent-enrollment @entrypoint:agent-enroll
   Scenario: Enroll a stable Agent identity
     Given the Agent is not enrolled with the selected Realmroot deployment
