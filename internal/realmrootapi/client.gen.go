@@ -4204,6 +4204,7 @@ type CreateAgentAuthorizationRequestResponse struct {
 				Uri       string                                                                          `json:"uri"`
 			} `json:"proof"`
 			ResourceIndicator string                                                                `json:"resourceIndicator"`
+			Scopes            []string                                                              `json:"scopes"`
 			Type              CreateAgentAuthorizationRequest201JSONResponseBodyCredentialOfferType `json:"type"`
 		} `json:"credentialOffer"`
 		DecidedAt   time.Time `json:"decidedAt"`
@@ -4283,6 +4284,7 @@ type GetAgentAuthorizationRequestResponse struct {
 				Uri       string                                                                       `json:"uri"`
 			} `json:"proof"`
 			ResourceIndicator string                                                             `json:"resourceIndicator"`
+			Scopes            []string                                                           `json:"scopes"`
 			Type              GetAgentAuthorizationRequest200JSONResponseBodyCredentialOfferType `json:"type"`
 		} `json:"credentialOffer"`
 		DecidedAt   time.Time `json:"decidedAt"`
@@ -5042,6 +5044,7 @@ func ParseCreateAgentAuthorizationRequestResponse(rsp *http.Response) (*CreateAg
 					Uri       string                                                                          `json:"uri"`
 				} `json:"proof"`
 				ResourceIndicator string                                                                `json:"resourceIndicator"`
+				Scopes            []string                                                              `json:"scopes"`
 				Type              CreateAgentAuthorizationRequest201JSONResponseBodyCredentialOfferType `json:"type"`
 			} `json:"credentialOffer"`
 			DecidedAt   time.Time `json:"decidedAt"`
@@ -5129,6 +5132,7 @@ func ParseGetAgentAuthorizationRequestResponse(rsp *http.Response) (*GetAgentAut
 					Uri       string                                                                       `json:"uri"`
 				} `json:"proof"`
 				ResourceIndicator string                                                             `json:"resourceIndicator"`
+				Scopes            []string                                                           `json:"scopes"`
 				Type              GetAgentAuthorizationRequest200JSONResponseBodyCredentialOfferType `json:"type"`
 			} `json:"credentialOffer"`
 			DecidedAt   time.Time `json:"decidedAt"`

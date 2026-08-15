@@ -108,7 +108,7 @@ func (s *Service) Request(ctx context.Context, server catalog.ResourceServer, sc
 			offer := polled.JSON200.CredentialOffer
 			authorization := mapsFromGetOffer(offer.AuthorizationDetails)
 			_, err := s.agent.AcceptAccessOffer(agent.AccessOffer{
-				AgentID: polled.JSON200.AgentId, Scopes: polled.JSON200.Scopes,
+				AgentID: polled.JSON200.AgentId, Scopes: offer.Scopes,
 				ResourceIndicator: offer.ResourceIndicator, AuthorizationDetails: authorization,
 				Endpoint: offer.Endpoint, ProofAlgorithm: string(offer.Proof.Algorithm),
 				ProofMethod: string(offer.Proof.Method), ProofURI: offer.Proof.Uri,
@@ -116,7 +116,7 @@ func (s *Service) Request(ctx context.Context, server catalog.ResourceServer, sc
 			if err != nil {
 				return Receipt{}, fmt.Errorf("store approved credential offer: %w", err)
 			}
-			return receipt(server, offer.ResourceIndicator, polled.JSON200.Scopes), nil
+			return receipt(server, offer.ResourceIndicator, offer.Scopes), nil
 		}
 		if status != "pending" {
 			return Receipt{}, fmt.Errorf("controller access interaction %s", status)
@@ -128,14 +128,14 @@ func (s *Service) Request(ctx context.Context, server catalog.ResourceServer, sc
 	offer := current.CredentialOffer
 	authorization := mapsFromCreateOffer(offer.AuthorizationDetails)
 	_, err = s.agent.AcceptAccessOffer(agent.AccessOffer{
-		AgentID: current.AgentId, Scopes: current.Scopes, ResourceIndicator: offer.ResourceIndicator,
+		AgentID: current.AgentId, Scopes: offer.Scopes, ResourceIndicator: offer.ResourceIndicator,
 		AuthorizationDetails: authorization, Endpoint: offer.Endpoint,
 		ProofAlgorithm: string(offer.Proof.Algorithm), ProofMethod: string(offer.Proof.Method), ProofURI: offer.Proof.Uri,
 	})
 	if err != nil {
 		return Receipt{}, fmt.Errorf("store approved credential offer: %w", err)
 	}
-	return receipt(server, offer.ResourceIndicator, current.Scopes), nil
+	return receipt(server, offer.ResourceIndicator, offer.Scopes), nil
 }
 
 func (s *Service) editor(scopes ...string) realmrootapi.RequestEditorFn {

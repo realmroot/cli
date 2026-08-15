@@ -87,73 +87,12 @@ func TestClearContextRemovesOnlyTheSelectedResource(t *testing.T) {
 	}
 }
 
-func TestBindingForScopeAlternativesReusesOlderOfferInActiveContext(t *testing.T) {
+func TestBindingForResourceReportsTheCurrentCumulativeCredential(t *testing.T) {
 	service, resource := serviceWithCredentialSources(t, map[string]credentialSource{
 		testCredentialSourceReference: sourceWithScopes(t, "workspace-1", []string{"files:read"}, []string{"files:write"}),
 	})
-	writeActiveBindings(t, service, 2, map[string]any{
-		resource: map[string]any{"reference": testCredentialSourceReference, "scopes": []string{"files:write"}},
-	})
-
-	binding, err := service.BindingForScopeAlternatives(resource, [][]string{{"files:read"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if binding.Reference != testCredentialSourceReference || len(binding.Scopes) != 1 || binding.Scopes[0] != "files:read" {
-		t.Fatalf("binding = %#v", binding)
-	}
-	active, err := service.ActiveBindingForResource(resource)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(active.Scopes) != 1 || active.Scopes[0] != "files:read" {
-		t.Fatalf("active binding = %#v", active)
-	}
-}
-
-func TestBindingForScopeAlternativesSelectsUniqueMatchingAuthorizationContext(t *testing.T) {
-	service, resource := serviceWithCredentialSources(t, map[string]credentialSource{
-		testCredentialSourceReference:   sourceWithScopes(t, "workspace-1", []string{"files:write"}),
-		secondCredentialSourceReference: sourceWithScopes(t, "workspace-2", []string{"files:read"}),
-	})
-	writeActiveBindings(t, service, 2, map[string]any{
-		resource: map[string]any{"reference": testCredentialSourceReference, "scopes": []string{"files:write"}},
-	})
-
-	binding, err := service.BindingForScopeAlternatives(resource, [][]string{{"files:read"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if binding.Reference != secondCredentialSourceReference || len(binding.Scopes) != 1 || binding.Scopes[0] != "files:read" {
-		t.Fatalf("binding = %#v", binding)
-	}
-	stored, err := service.activeBinding(resource)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if stored.Reference != secondCredentialSourceReference {
-		t.Fatalf("active binding = %#v", stored)
-	}
-}
-
-func TestBindingForScopeAlternativesRejectsAmbiguousAuthorizationContexts(t *testing.T) {
-	service, resource := serviceWithCredentialSources(t, map[string]credentialSource{
-		testCredentialSourceReference:   sourceWithScopes(t, "workspace-1", []string{"files:read"}),
-		secondCredentialSourceReference: sourceWithScopes(t, "workspace-2", []string{"files:read"}),
-	})
-
-	_, err := service.BindingForScopeAlternatives(resource, [][]string{{"files:read"}})
-	if !errors.Is(err, ErrAuthorizationContextAmbiguous) {
-		t.Fatalf("error = %v", err)
-	}
-}
-
-func TestBindingForResourceReportsEveryOfferInActiveContext(t *testing.T) {
-	service, resource := serviceWithCredentialSources(t, map[string]credentialSource{
-		testCredentialSourceReference: sourceWithScopes(t, "workspace-1", []string{"files:read"}, []string{"files:write"}),
-	})
-	writeActiveBindings(t, service, 2, map[string]any{
-		resource: map[string]any{"reference": testCredentialSourceReference, "scopes": []string{"files:write"}},
+	writeActiveBindings(t, service, 3, map[string]any{
+		resource: map[string]any{"reference": testCredentialSourceReference},
 	})
 
 	binding, err := service.BindingForResource(resource)
@@ -165,24 +104,24 @@ func TestBindingForResourceReportsEveryOfferInActiveContext(t *testing.T) {
 	}
 }
 
-func TestActiveBindingForResourceKeepsExactOfferForNativeTools(t *testing.T) {
+func TestActiveBindingForResourceUsesTheCurrentCumulativeCredentialForNativeTools(t *testing.T) {
 	service, resource := serviceWithCredentialSources(t, map[string]credentialSource{
 		testCredentialSourceReference: sourceWithScopes(t, "workspace-1", []string{"files:read"}, []string{"files:write"}),
 	})
-	writeActiveBindings(t, service, 2, map[string]any{
-		resource: map[string]any{"reference": testCredentialSourceReference, "scopes": []string{"files:write"}},
+	writeActiveBindings(t, service, 3, map[string]any{
+		resource: map[string]any{"reference": testCredentialSourceReference},
 	})
 
 	binding, err := service.ActiveBindingForResource(resource)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(binding.Scopes) != 1 || binding.Scopes[0] != "files:write" {
+	if !slices.Equal(binding.Scopes, []string{"files:read", "files:write"}) {
 		t.Fatalf("binding scopes = %#v", binding.Scopes)
 	}
 }
 
-func TestExecutionBindingStartsWithOneApprovedAuthoritySet(t *testing.T) {
+func TestExecutionBindingStartsWithTheCurrentCumulativeAuthority(t *testing.T) {
 	// [spec: cli/native-resource-tool]
 	service, resource := serviceWithCredentialSources(t, map[string]credentialSource{
 		testCredentialSourceReference: sourceWithScopes(
@@ -198,7 +137,7 @@ func TestExecutionBindingStartsWithOneApprovedAuthoritySet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if binding.Reference != testCredentialSourceReference || len(binding.Scopes) != 1 || binding.Scopes[0] != "contents:write" {
+	if binding.Reference != testCredentialSourceReference || !slices.Equal(binding.Scopes, []string{"contents:write", "metadata:read"}) {
 		t.Fatalf("initial execution binding = %#v", binding)
 	}
 
@@ -210,23 +149,19 @@ func TestExecutionBindingStartsWithOneApprovedAuthoritySet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(readBinding.Scopes) != 1 || readBinding.Scopes[0] != "metadata:read" {
+	if !slices.Equal(readBinding.Scopes, []string{"contents:write", "metadata:read"}) {
 		t.Fatalf("challenged execution binding = %#v", readBinding)
 	}
-	learnedBinding, err := service.BindingForAuthorizationContextEffectiveScopes(
-		resource,
-		details,
-		[]string{"contents:write", "metadata:read"},
-	)
+	learnedBinding, _, err := service.BindingForAuthorizationContext(resource, details)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(learnedBinding.Scopes) != 1 || learnedBinding.Scopes[0] != "metadata:read" {
+	if !slices.Equal(learnedBinding.Scopes, []string{"contents:write", "metadata:read"}) {
 		t.Fatalf("learned execution binding = %#v", learnedBinding)
 	}
 }
 
-func TestEffectiveContextBindingSkipsOffersWithRevokedScopes(t *testing.T) {
+func TestEffectiveContextBindingDoesNotDeriveAuthorityFromCatalogScopes(t *testing.T) {
 	service, resource := serviceWithCredentialSources(t, map[string]credentialSource{
 		testCredentialSourceReference: sourceWithScopes(
 			t,
@@ -237,16 +172,16 @@ func TestEffectiveContextBindingSkipsOffersWithRevokedScopes(t *testing.T) {
 	})
 	details := []map[string]any{{"type": "workspace", "identifier": "workspace-1"}}
 
-	binding, err := service.BindingForAuthorizationContextEffectiveScopes(resource, details, []string{"contents:write"})
+	binding, _, err := service.BindingForAuthorizationContext(resource, details)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if binding.Reference != testCredentialSourceReference || !slices.Equal(binding.Scopes, []string{"contents:write"}) {
+	if binding.Reference != testCredentialSourceReference || !slices.Equal(binding.Scopes, []string{"administration:write", "contents:write"}) {
 		t.Fatalf("effective binding = %#v", binding)
 	}
 }
 
-func TestExecutionBindingUsesOneApprovedSetFromTheActiveSource(t *testing.T) {
+func TestExecutionBindingUsesTheCurrentCumulativeCredentialFromTheActiveSource(t *testing.T) {
 	// [spec: cli/native-resource-tool]
 	service, resource := serviceWithCredentialSources(t, map[string]credentialSource{
 		testCredentialSourceReference: sourceWithScopes(
@@ -256,10 +191,9 @@ func TestExecutionBindingUsesOneApprovedSetFromTheActiveSource(t *testing.T) {
 			[]string{"contents:write"},
 		),
 	})
-	writeActiveBindings(t, service, 2, map[string]any{
+	writeActiveBindings(t, service, 3, map[string]any{
 		resource: map[string]any{
 			"reference": testCredentialSourceReference,
-			"scopes":    []string{"contents:read", "contents:write"},
 		},
 	})
 
@@ -267,7 +201,7 @@ func TestExecutionBindingUsesOneApprovedSetFromTheActiveSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if binding.Reference != testCredentialSourceReference || len(binding.Scopes) != 1 || binding.Scopes[0] != "contents:read" {
+	if binding.Reference != testCredentialSourceReference || !slices.Equal(binding.Scopes, []string{"contents:read", "contents:write"}) {
 		t.Fatalf("execution binding = %#v", binding)
 	}
 }
@@ -368,8 +302,8 @@ func TestAuthorizationContextsSelectsAnExistingContextWithoutExposingItsReferenc
 		testCredentialSourceReference:   sourceWithScopes(t, "workspace-1", []string{"files:write"}, []string{"files:read"}),
 		secondCredentialSourceReference: sourceWithScopes(t, "workspace-2", []string{"files:read"}),
 	})
-	writeActiveBindings(t, service, 2, map[string]any{
-		resource: map[string]any{"reference": testCredentialSourceReference, "scopes": []string{"files:write"}},
+	writeActiveBindings(t, service, 3, map[string]any{
+		resource: map[string]any{"reference": testCredentialSourceReference},
 	})
 
 	contexts, err := service.AuthorizationContexts(resource)
@@ -400,8 +334,8 @@ func TestBindingForAuthorizationContextDoesNotChangeTheActiveContext(t *testing.
 		testCredentialSourceReference:   sourceWithScopes(t, "workspace-1", []string{"files:read"}),
 		secondCredentialSourceReference: sourceWithScopes(t, "workspace-2", []string{"files:write"}),
 	})
-	writeActiveBindings(t, service, 2, map[string]any{
-		resource: map[string]any{"reference": testCredentialSourceReference, "scopes": []string{"files:read"}},
+	writeActiveBindings(t, service, 3, map[string]any{
+		resource: map[string]any{"reference": testCredentialSourceReference},
 	})
 
 	binding, _, err := service.BindingForAuthorizationContext(resource, []map[string]any{{"type": "workspace", "identifier": "workspace-2"}})
@@ -441,16 +375,16 @@ func TestBindingForReferenceScopeAlternativesNeverSwitchesAuthorizationContext(t
 
 func sourceWithScopes(t *testing.T, workspace string, scopeSets ...[]string) credentialSource {
 	t.Helper()
-	offers := make([]dpopCredential, 0, len(scopeSets))
-	for index, scopes := range scopeSets {
-		offer := testCredential(t, "", time.Time{})
-		offer.AuthorizationDetails = []map[string]any{{"type": "workspace", "identifier": workspace}}
-		offer.Scopes = append([]string(nil), scopes...)
-		offer.CredentialEndpoint = "https://auth.example.com/api/access-requests/request-" + workspace + "-" + string(rune('a'+index)) + "/credentials"
-		offers = append(offers, offer)
+	credential := testCredential(t, "", time.Time{})
+	credential.AuthorizationDetails = []map[string]any{{"type": "workspace", "identifier": workspace}}
+	credential.Scopes = nil
+	for _, scopes := range scopeSets {
+		credential.Scopes = append(credential.Scopes, scopes...)
 	}
+	credential.Scopes = normalizedBindingScopes(credential.Scopes)
+	credential.CredentialEndpoint = "https://auth.example.com/api/access-requests/request-" + workspace + "/credentials"
 	return credentialSource{
-		ResourceIndicator: offers[0].ResourceIndicator, AuthorizationDetails: offers[0].AuthorizationDetails, Offers: offers,
+		ResourceIndicator: credential.ResourceIndicator, AuthorizationDetails: credential.AuthorizationDetails, Credential: &credential,
 	}
 }
 

@@ -16,7 +16,7 @@ import (
 
 const (
 	stateDirectoryEnv  = "REALMROOT_STATE_DIR"
-	agentStateVersion  = 17
+	agentStateVersion  = 18
 	hostStateVersion   = 1
 	identityDirectory  = "identities"
 	hostDirectory      = "hosts"
@@ -60,7 +60,7 @@ type dpopCredential struct {
 type credentialSource struct {
 	ResourceIndicator    string           `json:"resource_indicator"`
 	AuthorizationDetails []map[string]any `json:"authorization_details,omitempty"`
-	Offers               []dpopCredential `json:"offers"`
+	Credential           *dpopCredential  `json:"credential"`
 }
 
 type agentState struct {
@@ -140,11 +140,11 @@ type credentialSourceStateReference struct {
 	source    credentialSource
 }
 
-type credentialOfferStore interface {
+type credentialStore interface {
 	FindCredentialSource(reference string, runtime string) (credentialSourceStateReference, error)
 	UpdateCredentialSourceState(reference credentialSourceStateReference) error
-	FindCredentialOffer(reference string, runtime string, scopes []string) (resourceCredentialReference, error)
-	RemoveCredentialOffer(reference resourceCredentialReference) error
+	FindCredential(reference string, runtime string, scopes []string) (resourceCredentialReference, error)
+	UpdateCredential(reference resourceCredentialReference, credential dpopCredential) error
 }
 
 func (s *fileStateStore) UpdateCredentialSourceState(reference credentialSourceStateReference) error {
@@ -438,7 +438,7 @@ func (s *fileStateStore) FindCredentialSource(reference string, runtime string) 
 	return *matched, nil
 }
 
-func (s *fileStateStore) FindCredentialOffer(reference string, runtime string, scopes []string) (resourceCredentialReference, error) {
+func (s *fileStateStore) FindCredential(reference string, runtime string, scopes []string) (resourceCredentialReference, error) {
 	var matched *resourceCredentialReference
 	err := s.walkStates(func(path string, state agentState) error {
 		if state.Runtime != runtime {
@@ -448,24 +448,17 @@ func (s *fileStateStore) FindCredentialOffer(reference string, runtime string, s
 		if !ok {
 			return nil
 		}
-		var offer *dpopCredential
-		for index := range source.Offers {
-			if scopesContain(source.Offers[index].Scopes, scopes) &&
-				(offer == nil || len(source.Offers[index].Scopes) < len(offer.Scopes)) {
-				offer = &source.Offers[index]
-			}
-		}
-		if offer == nil {
+		if source.Credential == nil || !scopesContain(source.Credential.Scopes, scopes) {
 			return nil
 		}
 		if matched != nil {
-			return errors.New("multiple Realmroot credential offers match the source reference")
+			return errors.New("multiple Realmroot Agent identities contain the credential source reference")
 		}
-		matched = &resourceCredentialReference{path: path, state: state, reference: reference, credential: *offer}
+		matched = &resourceCredentialReference{path: path, state: state, reference: reference, credential: *source.Credential}
 		return nil
 	})
 	if err != nil {
-		return resourceCredentialReference{}, fmt.Errorf("find Realmroot credential offer: %w", err)
+		return resourceCredentialReference{}, fmt.Errorf("find Realmroot credential: %w", err)
 	}
 	if matched == nil {
 		return resourceCredentialReference{}, os.ErrNotExist
@@ -473,34 +466,18 @@ func (s *fileStateStore) FindCredentialOffer(reference string, runtime string, s
 	return *matched, nil
 }
 
-func (s *fileStateStore) RemoveCredentialOffer(reference resourceCredentialReference) error {
-	source, ok := reference.state.CredentialSources[reference.reference]
+func (s *fileStateStore) UpdateCredential(reference resourceCredentialReference, credential dpopCredential) error {
+	state, err := s.loadPath(reference.path)
+	if err != nil {
+		return err
+	}
+	source, ok := state.CredentialSources[reference.reference]
 	if !ok {
 		return os.ErrNotExist
 	}
-	remaining := make([]dpopCredential, 0, len(source.Offers))
-	removed := false
-	for _, offer := range source.Offers {
-		if !removed && sameCredentialOffer(offer, reference.credential) {
-			removed = true
-			continue
-		}
-		remaining = append(remaining, offer)
-	}
-	if !removed {
-		return os.ErrNotExist
-	}
-	source.Offers = remaining
-	reference.state.CredentialSources[reference.reference] = source
-	return s.UpdateStateReference(agentStateReference{path: reference.path, state: reference.state})
-}
-
-func sameCredentialOffer(left dpopCredential, right dpopCredential) bool {
-	return left.ResourceIndicator == right.ResourceIndicator &&
-		sameAuthorizationDetails(left.AuthorizationDetails, right.AuthorizationDetails) &&
-		left.CredentialEndpoint == right.CredentialEndpoint &&
-		left.ProofTarget == right.ProofTarget &&
-		sameStringSet(left.Scopes, right.Scopes)
+	source.Credential = &credential
+	state.CredentialSources[reference.reference] = source
+	return s.UpdateStateReference(agentStateReference{path: reference.path, state: state})
 }
 
 func (s *fileStateStore) FindByOriginAndAgentID(origin string, agentID string) (agentState, error) {
@@ -669,24 +646,26 @@ func validateAgentStateCredentials(state agentState) error {
 		if _, err := validatedAbsoluteURL(source.ResourceIndicator); err != nil {
 			return fmt.Errorf("Agent state DPoP resource URL is invalid: %w", err)
 		}
-		for _, credential := range source.Offers {
-			if credential.ResourceIndicator != source.ResourceIndicator ||
-				!sameAuthorizationDetails(credential.AuthorizationDetails, source.AuthorizationDetails) ||
-				credential.CredentialEndpoint == "" || credential.ProofTarget == "" {
-				return errors.New("Agent state contains invalid DPoP credential metadata")
-			}
-			if _, err := validatedAbsoluteURL(credential.ResourceIndicator); err != nil {
-				return fmt.Errorf("Agent state DPoP resource URL is invalid: %w", err)
-			}
-			if _, err := validatedAbsoluteURL(credential.CredentialEndpoint); err != nil {
-				return fmt.Errorf("Agent state credential endpoint is invalid: %w", err)
-			}
-			if _, err := validatedAbsoluteURL(credential.ProofTarget); err != nil {
-				return fmt.Errorf("Agent state credential proof target is invalid: %w", err)
-			}
-			if credential.PrivateKey != "" || credential.AccessToken != "" || credential.ExpiresAt != nil {
-				return errors.New("Agent state credential offers must not contain target key or token material")
-			}
+		if source.Credential == nil {
+			return errors.New("Agent state credential source is missing its current credential")
+		}
+		credential := source.Credential
+		if credential.ResourceIndicator != source.ResourceIndicator ||
+			!sameAuthorizationDetails(credential.AuthorizationDetails, source.AuthorizationDetails) ||
+			len(credential.Scopes) == 0 || credential.CredentialEndpoint == "" || credential.ProofTarget == "" {
+			return errors.New("Agent state contains invalid DPoP credential metadata")
+		}
+		if _, err := validatedAbsoluteURL(credential.ResourceIndicator); err != nil {
+			return fmt.Errorf("Agent state DPoP resource URL is invalid: %w", err)
+		}
+		if _, err := validatedAbsoluteURL(credential.CredentialEndpoint); err != nil {
+			return fmt.Errorf("Agent state credential endpoint is invalid: %w", err)
+		}
+		if _, err := validatedAbsoluteURL(credential.ProofTarget); err != nil {
+			return fmt.Errorf("Agent state credential proof target is invalid: %w", err)
+		}
+		if credential.PrivateKey != "" || credential.AccessToken != "" || credential.ExpiresAt != nil {
+			return errors.New("Agent state credential metadata must not contain target key or token material")
 		}
 	}
 	if state.ProtocolCredential != nil {

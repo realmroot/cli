@@ -113,20 +113,21 @@ Feature: Realmroot Toolbox command line
 
   @journey:direct-resource-operation @entrypoint:toolbox-operation
   Scenario: Invoke an OpenAPI-generated Resource operation
-    Given one or more approved credential offers are stored for the Resource Server
+    Given one current cumulative credential is stored for each approved Resource Context
     When the Agent invokes the generated Toolbox operation
-    Then Toolbox uses the selected Context and automatically chooses approved authority that covers the operation
+    Then Toolbox uses the selected Context's current cumulative authority
+    And it never selects among historical access-request credentials
     And Restish sends the request directly to the Resource Server with the selected proof-bound credential
     And missing authority is reported using Realmroot Resource Server and scope vocabulary
     But embedded engine profiles, credential bindings, and setup commands are never exposed
 
   @journey:generic-resource-operation @entrypoint:toolbox-http
   Scenario: Invoke a registered Resource Server by name
-    Given one or more approved credential offers are stored for the Resource Server
+    Given one current cumulative credential is stored for each approved Resource Context
     When the Agent invokes a generic HTTP method with the Resource Server name and operation path
     Then Toolbox resolves the name to the registered Resource Server URL
     And it matches the HTTP method and path to the most specific published operation
-    And it uses the selected Context and automatically chooses the least approved authority that covers the operation
+    And it uses the selected Context's current cumulative authority
     And execution does not accept a Toolbox scope override
     But an unpublished path under a registered Resource Server is rejected
     But an absolute URL outside every registered Resource Server remains an unauthenticated request
@@ -139,7 +140,8 @@ Feature: Realmroot Toolbox command line
     Then the command uses a process-local authenticated broker backed by the selected Context's approved authority
     And provider credentials are never written to disk or exposed to the child process
     And the command exit status and terminal signals are preserved
-    But the command never requests or expands Resource authority
+    When the Resource Server reports one missing operation scope
+    Then Toolbox requests only that additive authority and replaces the Context credential with the new cumulative credential
 
   @journey:github-native-tools @entrypoint:exec
   Scenario: Use Git and GitHub CLI as the stable Agent

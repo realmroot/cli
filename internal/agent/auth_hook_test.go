@@ -268,7 +268,7 @@ func newCredentialState(t *testing.T, credential dpopCredential) *memoryStateSto
 		CredentialSources: map[string]credentialSource{
 			testCredentialSourceReference: {
 				ResourceIndicator: credential.ResourceIndicator, AuthorizationDetails: credential.AuthorizationDetails,
-				Offers: []dpopCredential{credential},
+				Credential: &credential,
 			},
 		},
 		ProtocolCredential: &dpopCredential{
@@ -394,19 +394,15 @@ func (s *memoryStateStore) UpdateStateReference(reference agentStateReference) e
 	return nil
 }
 
-func (s *memoryStateStore) FindCredentialOffer(reference, runtime string, scopes []string) (resourceCredentialReference, error) {
+func (s *memoryStateStore) FindCredential(reference, runtime string, scopes []string) (resourceCredentialReference, error) {
 	if !s.exists || s.state.Runtime != runtime {
 		return resourceCredentialReference{}, os.ErrNotExist
 	}
 	source, ok := s.state.CredentialSources[reference]
-	if ok {
-		for _, credential := range source.Offers {
-			if scopesContain(credential.Scopes, scopes) {
-				return resourceCredentialReference{
-					path: "memory", state: s.state, reference: reference, credential: credential,
-				}, nil
-			}
-		}
+	if ok && source.Credential != nil && scopesContain(source.Credential.Scopes, scopes) {
+		return resourceCredentialReference{
+			path: "memory", state: s.state, reference: reference, credential: *source.Credential,
+		}, nil
 	}
 	return resourceCredentialReference{}, os.ErrNotExist
 }
@@ -429,24 +425,12 @@ func (s *memoryStateStore) UpdateCredentialSourceState(reference credentialSourc
 	return nil
 }
 
-func (s *memoryStateStore) RemoveCredentialOffer(reference resourceCredentialReference) error {
+func (s *memoryStateStore) UpdateCredential(reference resourceCredentialReference, credential dpopCredential) error {
 	source, ok := s.state.CredentialSources[reference.reference]
 	if !ok {
 		return os.ErrNotExist
 	}
-	remaining := make([]dpopCredential, 0, len(source.Offers))
-	removed := false
-	for _, offer := range source.Offers {
-		if !removed && sameCredentialOffer(offer, reference.credential) {
-			removed = true
-			continue
-		}
-		remaining = append(remaining, offer)
-	}
-	if !removed {
-		return os.ErrNotExist
-	}
-	source.Offers = remaining
+	source.Credential = &credential
 	s.state.CredentialSources[reference.reference] = source
 	return nil
 }
