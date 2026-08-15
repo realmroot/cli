@@ -113,14 +113,14 @@ func TestProfiledResponseAcceptsCredentialOfferWithoutGrantKnowledge(t *testing.
 		if _, exposed := body["credentialSource"]; exposed {
 			t.Fatalf("public response exposes internal credential binding: %#v", body)
 		}
-		stored := states.state.CredentialSources[testCredentialSourceReference].Offers[0]
+		stored := *states.state.CredentialSources[testCredentialSourceReference].Credential
 		if stored.AccessToken != "" || stored.PrivateKey != "" || stored.ExpiresAt != nil {
 			t.Fatalf("plugin retained target credential material: %#v", stored)
 		}
 	})
 }
 
-func TestCredentialOfferReusesResourceReferenceAndPreservesOtherScopes(t *testing.T) {
+func TestCredentialOfferReusesResourceReferenceAndReplacesTheCurrentCredential(t *testing.T) {
 	t.Log("[spec: agent-identity/restish-resource-credential-lifecycle]")
 	readOffer := testCredential(t, "", time.Time{})
 	states := newCredentialState(t, readOffer)
@@ -141,12 +141,8 @@ func TestCredentialOfferReusesResourceReferenceAndPreservesOtherScopes(t *testin
 		t.Fatal(err)
 	}
 	source := states.state.CredentialSources[testCredentialSourceReference]
-	if len(source.Offers) != 2 {
-		t.Fatalf("offers = %#v", source.Offers)
-	}
-	if source.Offers[0].CredentialEndpoint != readOffer.CredentialEndpoint ||
-		source.Offers[1].CredentialEndpoint != writeOffer.CredentialEndpoint {
-		t.Fatalf("offers = %#v", source.Offers)
+	if source.Credential == nil || source.Credential.CredentialEndpoint != writeOffer.CredentialEndpoint {
+		t.Fatalf("current credential = %#v", source.Credential)
 	}
 
 	renewedReadOffer := readOffer
@@ -162,17 +158,16 @@ func TestCredentialOfferReusesResourceReferenceAndPreservesOtherScopes(t *testin
 		t.Fatal(err)
 	}
 	source = states.state.CredentialSources[testCredentialSourceReference]
-	if len(source.Offers) != 2 || source.Offers[0].CredentialEndpoint != renewedReadOffer.CredentialEndpoint ||
-		source.Offers[1].CredentialEndpoint != writeOffer.CredentialEndpoint {
-		t.Fatalf("offers after same-scope replacement = %#v", source.Offers)
+	if source.Credential == nil || source.Credential.CredentialEndpoint != renewedReadOffer.CredentialEndpoint {
+		t.Fatalf("current credential after replacement = %#v", source.Credential)
 	}
 }
 
-func TestCredentialOfferReusesSourceReferenceAfterAllOffersWereRejected(t *testing.T) {
+func TestCredentialOfferReusesSourceReferenceWhenReplacingTheCurrentCredential(t *testing.T) {
 	credential := testCredential(t, "", time.Time{})
 	states := newCredentialState(t, credential)
 	source := states.state.CredentialSources[testCredentialSourceReference]
-	source.Offers = nil
+	source.Credential = nil
 	states.state.CredentialSources[testCredentialSourceReference] = source
 	representation := completedInteractionWithOffer(credential)
 	resource, err := decodeHookBody[interactiveResponse](representation)
@@ -195,9 +190,9 @@ func TestCredentialOfferReusesSourceReferenceAfterAllOffersWereRejected(t *testi
 	if body := output.Response.Body.(map[string]any); body["credentialSource"] != nil {
 		t.Fatalf("public response exposes internal credential binding: %#v", body)
 	}
-	if offers := states.state.CredentialSources[testCredentialSourceReference].Offers; len(offers) != 1 ||
-		!sameCredentialOffer(offers[0], credential) {
-		t.Fatalf("restored offers = %#v", offers)
+	if current := states.state.CredentialSources[testCredentialSourceReference].Credential; current == nil ||
+		current.CredentialEndpoint != credential.CredentialEndpoint {
+		t.Fatalf("current credential = %#v", current)
 	}
 }
 
@@ -228,8 +223,8 @@ func TestCredentialOfferUsesSeparateReferenceForDifferentAuthorizationContext(t 
 		t.Fatalf("public response exposes internal credential binding: %#v", body)
 	}
 	if len(states.state.CredentialSources) != 2 ||
-		len(states.state.CredentialSources[testCredentialSourceReference].Offers) != 1 ||
-		len(states.state.CredentialSources[otherReference].Offers) != 1 {
+		states.state.CredentialSources[testCredentialSourceReference].Credential == nil ||
+		states.state.CredentialSources[otherReference].Credential == nil {
 		t.Fatalf("credential sources = %#v", states.state.CredentialSources)
 	}
 }
@@ -299,7 +294,7 @@ func completedInteractionWithOffer(credential dpopCredential) map[string]any {
 	body["links"] = map[string]any{"self": "https://auth.example.com/api/access-requests/request-1"}
 	body["credentialOffer"] = map[string]any{
 		"type": "dpop", "resourceIndicator": credential.ResourceIndicator,
-		"authorizationDetails": credential.AuthorizationDetails, "endpoint": credential.CredentialEndpoint,
+		"authorizationDetails": credential.AuthorizationDetails, "scopes": credential.Scopes, "endpoint": credential.CredentialEndpoint,
 		"proof": map[string]any{"algorithm": "ES256", "method": "POST", "uri": credential.ProofTarget},
 	}
 	return body

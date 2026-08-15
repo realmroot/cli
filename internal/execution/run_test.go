@@ -6,16 +6,6 @@ import (
 	"testing"
 )
 
-func TestIntersectScopesDropsRevokedAuthority(t *testing.T) {
-	got := intersectScopes(
-		[]string{"administration:write", "contents:write", "metadata:read"},
-		[]string{"contents:write", "metadata:read"},
-	)
-	if !slices.Equal(got, []string{"contents:write", "metadata:read"}) {
-		t.Fatalf("effective scopes = %v", got)
-	}
-}
-
 func TestPermittedScopeAlternativeUsesCompletePublishedAlternative(t *testing.T) {
 	got, err := permittedScopeAlternative(
 		[][]string{{"administration:write"}, {"metadata:read", "pull_requests:write"}},

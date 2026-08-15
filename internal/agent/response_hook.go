@@ -50,6 +50,7 @@ type credentialOffer struct {
 	Type                 string           `json:"type"`
 	ResourceIndicator    string           `json:"resourceIndicator"`
 	AuthorizationDetails []map[string]any `json:"authorizationDetails"`
+	Scopes               []string         `json:"scopes"`
 	Endpoint             string           `json:"endpoint"`
 	Proof                struct {
 		Algorithm string `json:"algorithm"`
@@ -246,9 +247,23 @@ func acceptCredentialOfferWithReference(
 	states agentStateFinder,
 	references credentialSourceReferenceGenerator,
 ) (plugin.ResponseMiddlewareOutput, string, error) {
-	if offer.Type != "dpop" || offer.Proof.Algorithm != "ES256" || offer.Proof.Method != http.MethodPost ||
-		offer.ResourceIndicator == "" || offer.Endpoint == "" || offer.Proof.URI == "" {
-		return plugin.ResponseMiddlewareOutput{}, "", errors.New("Resource credential offer is invalid")
+	if offer.Type != "dpop" {
+		return plugin.ResponseMiddlewareOutput{}, "", errors.New("Resource credential offer type must be dpop")
+	}
+	if offer.Proof.Algorithm != "ES256" || offer.Proof.Method != http.MethodPost || offer.Proof.URI == "" {
+		return plugin.ResponseMiddlewareOutput{}, "", errors.New("Resource credential offer proof is invalid")
+	}
+	if offer.ResourceIndicator == "" {
+		return plugin.ResponseMiddlewareOutput{}, "", errors.New("Resource credential offer resource indicator is required")
+	}
+	if len(offer.Scopes) == 0 {
+		return plugin.ResponseMiddlewareOutput{}, "", fmt.Errorf(
+			"Resource credential offer scopes are required (access request scopes: %q)",
+			resource.Scopes,
+		)
+	}
+	if offer.Endpoint == "" {
+		return plugin.ResponseMiddlewareOutput{}, "", errors.New("Resource credential offer endpoint is required")
 	}
 	if !sameOrigin(offer.Endpoint, origin) {
 		return plugin.ResponseMiddlewareOutput{}, "", errors.New("Resource credential endpoint must use the discovered issuer origin")
@@ -271,7 +286,7 @@ func acceptCredentialOfferWithReference(
 		AuthorizationDetails: authorizationDetails,
 		CredentialEndpoint:   offer.Endpoint,
 		ProofTarget:          offer.Proof.URI,
-		Scopes:               append([]string(nil), resource.Scopes...),
+		Scopes:               append([]string(nil), offer.Scopes...),
 	}
 	if reference.state.CredentialSources == nil {
 		reference.state.CredentialSources = make(map[string]credentialSource)
@@ -300,21 +315,11 @@ func acceptCredentialOfferWithReference(
 		reference.state.CredentialSources[credentialSourceReference] = credentialSource{
 			ResourceIndicator:    credential.ResourceIndicator,
 			AuthorizationDetails: append([]map[string]any{}, credential.AuthorizationDetails...),
-			Offers:               []dpopCredential{credential},
+			Credential:           &credential,
 		}
 	} else {
 		source := reference.state.CredentialSources[credentialSourceReference]
-		replaced := false
-		for index := range source.Offers {
-			if sameStringSet(source.Offers[index].Scopes, credential.Scopes) {
-				source.Offers[index] = credential
-				replaced = true
-				break
-			}
-		}
-		if !replaced {
-			source.Offers = append(source.Offers, credential)
-		}
+		source.Credential = &credential
 		reference.state.CredentialSources[credentialSourceReference] = source
 	}
 	if err := store.UpdateStateReference(reference); err != nil {
@@ -324,7 +329,7 @@ func acceptCredentialOfferWithReference(
 		"status":               "ready",
 		"resourceIndicator":    credential.ResourceIndicator,
 		"authorizationDetails": credential.AuthorizationDetails,
-		"scopes":               resource.Scopes,
+		"scopes":               offer.Scopes,
 	}}}, credentialSourceReference, nil
 }
 

@@ -56,11 +56,7 @@ func (r *Runner) Run(ctx context.Context, server catalog.ResourceServer, integra
 	phaseStartedAt := time.Now()
 	var binding agent.CredentialBinding
 	if options.ExactAuthorizationContext {
-		binding, err = r.service.BindingForAuthorizationContextEffectiveScopes(
-			server.ResourceURL,
-			options.AuthorizationDetails,
-			options.EffectiveScopes,
-		)
+		binding, _, err = r.service.BindingForAuthorizationContext(server.ResourceURL, options.AuthorizationDetails)
 	} else {
 		binding, err = r.service.ExecutionBinding(server.ResourceURL, options.AuthorizationDetails)
 	}
@@ -68,7 +64,6 @@ func (r *Runner) Run(ctx context.Context, server catalog.ResourceServer, integra
 		return fmt.Errorf("load selected %s Context authority: %w; inspect Contexts with `realmroot toolbox %s context` or request access with `realmroot agent request`", server.CommandName, err, server.CommandName)
 	}
 	observability.LogDuration(r.logger, observability.LevelTrace, "authority.resolve", phaseStartedAt, "scope_count", len(binding.Scopes))
-	binding.Scopes = intersectScopes(binding.Scopes, options.EffectiveScopes)
 	broker, err := NewBroker(
 		server.ResourceURL,
 		binding.Reference,
@@ -77,7 +72,7 @@ func (r *Runner) Run(ctx context.Context, server catalog.ResourceServer, integra
 		func(reference string, alternatives [][]string) ([]string, error) {
 			resolved, err := r.service.BindingForReferenceScopeAlternatives(server.ResourceURL, reference, alternatives)
 			if err == nil {
-				return intersectScopes(resolved.Scopes, options.EffectiveScopes), nil
+				return resolved.Scopes, nil
 			}
 			if !errors.Is(err, os.ErrNotExist) || options.RequestAuthority == nil {
 				return nil, err
@@ -90,7 +85,7 @@ func (r *Runner) Run(ctx context.Context, server catalog.ResourceServer, integra
 				return nil, err
 			}
 			resolved, err = r.service.BindingForReferenceScopeAlternatives(server.ResourceURL, reference, alternatives)
-			return intersectScopes(resolved.Scopes, options.EffectiveScopes), err
+			return resolved.Scopes, err
 		},
 		r.client,
 	)
@@ -189,20 +184,6 @@ func permittedScopeAlternative(alternatives [][]string, allowed []string) ([]str
 		}
 	}
 	return nil, errors.New("native command requested scopes outside the selected Resource Context")
-}
-
-func intersectScopes(scopes, allowed []string) []string {
-	available := make(map[string]bool, len(allowed))
-	for _, scope := range allowed {
-		available[scope] = true
-	}
-	result := make([]string, 0, len(scopes))
-	for _, scope := range scopes {
-		if available[scope] {
-			result = append(result, scope)
-		}
-	}
-	return result
 }
 
 type ExitError struct {

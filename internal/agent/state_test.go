@@ -286,7 +286,7 @@ func TestFileStateStoreFindsCredentialOfferByOpaqueReference(t *testing.T) {
 		CredentialSources: map[string]credentialSource{
 			testCredentialSourceReference: {
 				ResourceIndicator: credential.ResourceIndicator, AuthorizationDetails: credential.AuthorizationDetails,
-				Offers: []dpopCredential{credential},
+				Credential: &credential,
 			},
 		},
 	}
@@ -302,7 +302,7 @@ func TestFileStateStoreFindsCredentialOfferByOpaqueReference(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	reference, err := store.FindCredentialOffer(testCredentialSourceReference, target.Runtime, credential.Scopes)
+	reference, err := store.FindCredential(testCredentialSourceReference, target.Runtime, credential.Scopes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -312,7 +312,7 @@ func TestFileStateStoreFindsCredentialOfferByOpaqueReference(t *testing.T) {
 	}
 }
 
-func TestFileStateStoreRetainsCredentialSourceAfterRemovingItsLastOffer(t *testing.T) {
+func TestFileStateStoreUpdatesTheCurrentCredential(t *testing.T) {
 	store := &fileStateStore{root: t.TempDir()}
 	target := agentTarget{
 		Runtime: defaultAgentRuntime, Origin: "https://auth.example.com", Issuer: "https://auth.example.com/api/auth",
@@ -331,11 +331,21 @@ func TestFileStateStoreRetainsCredentialSourceAfterRemovingItsLastOffer(t *testi
 		t.Fatal(err)
 	}
 
-	reference, err := store.FindCredentialOffer(testCredentialSourceReference, target.Runtime, credential.Scopes)
+	reference, err := store.FindCredential(testCredentialSourceReference, target.Runtime, credential.Scopes)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.RemoveCredentialOffer(reference); err != nil {
+	latest, err := store.Load(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	latest.Name = "Updated concurrently"
+	if err := store.Update(target, latest); err != nil {
+		t.Fatal(err)
+	}
+	updated := credential
+	updated.Scopes = []string{"files:read", "files:write"}
+	if err := store.UpdateCredential(reference, updated); err != nil {
 		t.Fatal(err)
 	}
 
@@ -345,26 +355,28 @@ func TestFileStateStoreRetainsCredentialSourceAfterRemovingItsLastOffer(t *testi
 	}
 	if source.source.ResourceIndicator != credential.ResourceIndicator ||
 		!sameAuthorizationDetails(source.source.AuthorizationDetails, credential.AuthorizationDetails) ||
-		len(source.source.Offers) != 0 {
-		t.Fatalf("retained source = %#v", source.source)
+		source.source.Credential == nil || !sameStringSet(source.source.Credential.Scopes, updated.Scopes) {
+		t.Fatalf("updated source = %#v", source.source)
+	}
+	if source.state.Name != "Updated concurrently" {
+		t.Fatalf("credential update overwrote newer Agent state: %#v", source.state)
 	}
 	if _, err := store.Load(target); err != nil {
-		t.Fatalf("retained empty credential source is invalid: %v", err)
+		t.Fatalf("updated credential source is invalid: %v", err)
 	}
 }
 
-func TestFileStateStoreSelectsTheLeastBroadOfferThatCoversRequestedScopes(t *testing.T) {
+func TestFileStateStoreReturnsTheOneCurrentCredentialThatCoversRequestedScopes(t *testing.T) {
 	store := &fileStateStore{root: t.TempDir()}
 	target := agentTarget{
 		Runtime: defaultAgentRuntime, Origin: "https://auth.example.com", Issuer: "https://auth.example.com/api/auth",
 	}
-	exact := testCredential(t, "", time.Time{})
-	broad := exact
+	broad := testCredential(t, "", time.Time{})
 	broad.Scopes = []string{"files:read", "files:write"}
 	broad.CredentialEndpoint = "https://auth.example.com/api/access-requests/broad/credentials"
-	state := newCredentialState(t, exact).state
+	state := newCredentialState(t, broad).state
 	source := state.CredentialSources[testCredentialSourceReference]
-	source.Offers = []dpopCredential{broad, exact}
+	source.Credential = &broad
 	state.CredentialSources[testCredentialSourceReference] = source
 	path := store.path(target)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
@@ -378,7 +390,7 @@ func TestFileStateStoreSelectsTheLeastBroadOfferThatCoversRequestedScopes(t *tes
 		t.Fatal(err)
 	}
 
-	reference, err := store.FindCredentialOffer(
+	reference, err := store.FindCredential(
 		testCredentialSourceReference,
 		target.Runtime,
 		[]string{"files:read"},
@@ -386,8 +398,8 @@ func TestFileStateStoreSelectsTheLeastBroadOfferThatCoversRequestedScopes(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !sameCredentialOffer(reference.credential, exact) {
-		t.Fatalf("selected offer = %#v", reference.credential)
+	if reference.credential.CredentialEndpoint != broad.CredentialEndpoint || !sameStringSet(reference.credential.Scopes, broad.Scopes) {
+		t.Fatalf("current credential = %#v", reference.credential)
 	}
 }
 
@@ -397,7 +409,7 @@ func TestAgentStateRejectsResourceURLAsCredentialSourceReference(t *testing.T) {
 	state.CredentialSources = map[string]credentialSource{
 		credential.ResourceIndicator: {
 			ResourceIndicator: credential.ResourceIndicator, AuthorizationDetails: credential.AuthorizationDetails,
-			Offers: []dpopCredential{credential},
+			Credential: &credential,
 		},
 	}
 

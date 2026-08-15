@@ -51,6 +51,33 @@ type dpopNonceChallenge struct{ nonce string }
 type targetCredentialIssueError struct{ err error }
 
 func (e *targetCredentialIssueError) Error() string {
+	var responseErr *httpResponseError
+	if errors.As(e.err, &responseErr) {
+		var problem struct {
+			Detail           string `json:"detail"`
+			ErrorDescription string `json:"error_description"`
+			Error            struct {
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if json.Unmarshal([]byte(responseErr.Body), &problem) == nil {
+			detail := problem.Detail
+			if detail == "" {
+				detail = problem.ErrorDescription
+			}
+			if detail == "" {
+				detail = problem.Error.Message
+			}
+			if detail != "" {
+				return fmt.Sprintf("Realmroot credential HTTP %d: %s", responseErr.StatusCode, detail)
+			}
+		}
+		body := strings.TrimSpace(responseErr.Body)
+		if len(body) > 40 {
+			body = body[:40] + "…"
+		}
+		return fmt.Sprintf("Realmroot credential HTTP %d: %s", responseErr.StatusCode, body)
+	}
 	return "issue target API access token: " + e.err.Error()
 }
 func (e *targetCredentialIssueError) Unwrap() error { return e.err }
@@ -62,7 +89,7 @@ func (e *dpopNonceChallenge) Error() string {
 func handleCredentialSource(
 	ctx context.Context,
 	input credentialSourceInput,
-	states credentialOfferStore,
+	states credentialStore,
 	client httpDoer,
 ) (credentialSourceOutput, error) {
 	if input.Reference == "" {
@@ -89,10 +116,10 @@ func handleCredentialSource(
 				Scopes:      append([]string(nil), input.Scopes...),
 			}}, nil
 		}
-		reference, err := states.FindCredentialOffer(input.Reference, runtime, input.Scopes)
+		reference, err := states.FindCredential(input.Reference, runtime, input.Scopes)
 		if errors.Is(err, os.ErrNotExist) {
 			return credentialSourceOutput{}, fmt.Errorf(
-				"Realmroot has no approved credential offer for credential source %q and scopes %q; request exact Resource access before retrying",
+				"Realmroot credential source %q does not currently authorize scopes %q; request additional Resource access before retrying",
 				input.Reference,
 				input.Scopes,
 			)
@@ -130,34 +157,24 @@ func handleCredentialSource(
 			}
 			return credentialSourceOutput{Credential: &credential}, nil
 		}
-		reference, err := states.FindCredentialOffer(input.Reference, runtime, input.Scopes)
+		reference, err := states.FindCredential(input.Reference, runtime, input.Scopes)
 		if err != nil {
 			return credentialSourceOutput{}, err
 		}
-		proofTarget := reference.credential.ProofTarget
-		var token targetTokenResponse
-		for {
-			token, err = issueTargetCredential(ctx, client, states, reference, reference.credential, input.Proof)
-			if err == nil {
-				break
-			}
+		token, err := issueTargetCredential(ctx, client, states, reference, reference.credential, input.Proof)
+		if err != nil {
 			var challenge *dpopNonceChallenge
 			if errors.As(err, &challenge) {
 				return credentialSourceOutput{Challenge: &credentialSourceChallenge{
 					Type: "dpop-nonce", Nonce: challenge.nonce,
 				}}, nil
 			}
-			if !terminalCredentialPermissionError(err) {
-				return credentialSourceOutput{}, err
-			}
-			if removeErr := states.RemoveCredentialOffer(reference); removeErr != nil {
-				return credentialSourceOutput{}, fmt.Errorf("remove invalid Resource credential offer: %w", removeErr)
-			}
-			next, findErr := states.FindCredentialOffer(input.Reference, runtime, input.Scopes)
-			if findErr != nil || next.credential.ProofTarget != proofTarget {
-				return credentialSourceOutput{}, err
-			}
-			reference = next
+			return credentialSourceOutput{}, err
+		}
+		updated := reference.credential
+		updated.Scopes = append([]string(nil), token.Scopes...)
+		if err := states.UpdateCredential(reference, updated); err != nil {
+			return credentialSourceOutput{}, fmt.Errorf("update current Resource credential: %w", err)
 		}
 		return credentialSourceOutput{Credential: &credentialSourceCredential{
 			AccessToken: token.AccessToken,
@@ -180,7 +197,7 @@ type bootstrapCredentialSource struct {
 func resolveBootstrapCredentialSource(
 	ctx context.Context,
 	client httpDoer,
-	states credentialOfferStore,
+	states credentialStore,
 	reference string,
 	runtime string,
 	scopes []string,
@@ -211,7 +228,7 @@ func resolveBootstrapCredentialSource(
 func issueBootstrapCredential(
 	ctx context.Context,
 	client httpDoer,
-	states credentialOfferStore,
+	states credentialStore,
 	reference credentialSourceStateReference,
 	configuration agentConfiguration,
 	scopes []string,
@@ -269,7 +286,7 @@ func issueBootstrapCredential(
 func ensureInternalProtocolCredential(
 	ctx context.Context,
 	client httpDoer,
-	states credentialOfferStore,
+	states credentialStore,
 	reference credentialSourceStateReference,
 	configuration agentConfiguration,
 	requiredScopes []string,
@@ -306,26 +323,16 @@ func ensureInternalProtocolCredential(
 	return *credential, nil
 }
 
-func terminalCredentialPermissionError(err error) bool {
-	var issueError *targetCredentialIssueError
-	if !errors.As(err, &issueError) {
-		return false
-	}
-	var responseErr *httpResponseError
-	return errors.As(issueError.err, &responseErr) &&
-		(responseErr.StatusCode == http.StatusForbidden || responseErr.StatusCode == http.StatusNotFound)
-}
-
 func issueTargetCredential(
 	ctx context.Context,
 	client httpDoer,
-	states credentialOfferStore,
+	states credentialStore,
 	reference resourceCredentialReference,
 	offer dpopCredential,
 	targetProof string,
 ) (targetTokenResponse, error) {
 	if offer.CredentialEndpoint == "" || offer.ProofTarget == "" {
-		return targetTokenResponse{}, errors.New("stored Resource credential offer is incomplete")
+		return targetTokenResponse{}, errors.New("stored Resource credential is incomplete")
 	}
 	if !sameOrigin(offer.CredentialEndpoint, reference.state.Origin) {
 		return targetTokenResponse{}, errors.New("stored Resource credential endpoint does not belong to its issuer")
@@ -368,7 +375,7 @@ func issueTargetCredential(
 	token.DPoPNonce = nonce
 	if token.TokenType != "DPoP" || token.AccessToken == "" || token.ResourceIndicator != offer.ResourceIndicator ||
 		!sameAuthorizationDetails(token.AuthorizationDetails, offer.AuthorizationDetails) || !token.ExpiresAt.After(time.Now()) ||
-		!sameStringSet(token.Scopes, offer.Scopes) {
+		len(token.Scopes) == 0 {
 		return targetTokenResponse{}, errors.New("Realmroot returned an invalid target API access token")
 	}
 	return token, nil

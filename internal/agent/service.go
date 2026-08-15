@@ -220,6 +220,7 @@ func (s *Service) AcceptAccessOffer(offer AccessOffer) (CredentialBinding, error
 	credential := credentialOffer{
 		Type: "dpop", ResourceIndicator: offer.ResourceIndicator,
 		AuthorizationDetails: append([]map[string]any(nil), offer.AuthorizationDetails...),
+		Scopes:               append([]string(nil), offer.Scopes...),
 		Endpoint:             offer.Endpoint,
 	}
 	credential.Proof.Algorithm = offer.ProofAlgorithm
@@ -355,20 +356,7 @@ func (s *Service) ActiveBindingForResource(resourceIndicator string) (Credential
 		if source.reference != active.Reference {
 			continue
 		}
-		if len(active.Scopes) > 0 {
-			offer, ok := leastPrivilegeOffer(source.source.Offers, [][]string{active.Scopes})
-			if !ok {
-				return CredentialBinding{}, os.ErrNotExist
-			}
-			return CredentialBinding{Reference: source.reference, Scopes: normalizedBindingScopes(offer.Scopes)}, nil
-		}
-		if len(source.source.Offers) == 1 {
-			return CredentialBinding{
-				Reference: source.reference,
-				Scopes:    normalizedBindingScopes(source.source.Offers[0].Scopes),
-			}, nil
-		}
-		return CredentialBinding{}, errors.New("active Resource Server authority does not identify one credential offer")
+		return bindingForSource(source), nil
 	}
 	return CredentialBinding{}, os.ErrNotExist
 }
@@ -391,16 +379,7 @@ func (s *Service) ExecutionBinding(resourceIndicator string, details []map[strin
 		if source.reference != active.Reference {
 			continue
 		}
-		if len(active.Scopes) > 0 {
-			if offer, ok := leastPrivilegeOffer(source.source.Offers, [][]string{active.Scopes}); ok {
-				return CredentialBinding{Reference: source.reference, Scopes: normalizedBindingScopes(offer.Scopes)}, nil
-			}
-		}
-		binding, ok := leastPrivilegeSourceBinding(source)
-		if !ok {
-			return CredentialBinding{}, os.ErrNotExist
-		}
-		return binding, nil
+		return bindingForSource(source), nil
 	}
 	if len(sources) == 0 {
 		return CredentialBinding{}, os.ErrNotExist
@@ -408,10 +387,7 @@ func (s *Service) ExecutionBinding(resourceIndicator string, details []map[strin
 	if len(sources) > 1 {
 		return CredentialBinding{}, fmt.Errorf("%w for Resource Server %q", ErrAuthorizationContextAmbiguous, resourceIndicator)
 	}
-	binding, ok := leastPrivilegeSourceBinding(sources[0])
-	if !ok {
-		return CredentialBinding{}, os.ErrNotExist
-	}
+	binding := bindingForSource(sources[0])
 	if err := s.storeActiveBinding(resourceIndicator, binding); err != nil {
 		return CredentialBinding{}, err
 	}
@@ -459,10 +435,7 @@ func (s *Service) BindingForAuthorizationContext(resourceIndicator string, detai
 		if !sameAuthorizationDetails(source.source.AuthorizationDetails, details) {
 			continue
 		}
-		binding, ok := leastPrivilegeSourceBinding(source)
-		if !ok {
-			return CredentialBinding{}, AuthorizationContext{}, os.ErrNotExist
-		}
+		binding := bindingForSource(source)
 		return binding, AuthorizationContext{
 			AuthorizationDetails: cloneAuthorizationDetails(source.source.AuthorizationDetails),
 			Scopes:               bindingForSource(source).Scopes,
@@ -484,55 +457,6 @@ func (s *Service) BindingForAuthorizationContextAllAuthority(resourceIndicator s
 	return CredentialBinding{}, os.ErrNotExist
 }
 
-func (s *Service) BindingForAuthorizationContextEffectiveScopes(resourceIndicator string, details []map[string]any, allowed []string) (CredentialBinding, error) {
-	sources, err := s.credentialSourcesForResource(resourceIndicator)
-	if err != nil {
-		return CredentialBinding{}, err
-	}
-	allowedSet := make(map[string]bool, len(allowed))
-	for _, scope := range allowed {
-		allowedSet[scope] = true
-	}
-	active, activeErr := s.activeBinding(resourceIndicator)
-	if activeErr != nil && !errors.Is(activeErr, os.ErrNotExist) {
-		return CredentialBinding{}, activeErr
-	}
-	for _, source := range sources {
-		if !sameAuthorizationDetails(source.source.AuthorizationDetails, details) {
-			continue
-		}
-		if source.reference == active.Reference && len(active.Scopes) > 0 && allScopesAllowed(active.Scopes, allowedSet) {
-			if offer, ok := leastPrivilegeOffer(source.source.Offers, [][]string{active.Scopes}); ok {
-				return CredentialBinding{Reference: source.reference, Scopes: normalizedBindingScopes(offer.Scopes)}, nil
-			}
-		}
-		var selected []string
-		for _, offer := range source.source.Offers {
-			candidate := normalizedBindingScopes(offer.Scopes)
-			if len(candidate) == 0 || !allScopesAllowed(candidate, allowedSet) {
-				continue
-			}
-			if selected == nil || len(candidate) < len(selected) || (len(candidate) == len(selected) && strings.Join(candidate, "\x00") < strings.Join(selected, "\x00")) {
-				selected = candidate
-			}
-		}
-		if selected == nil {
-			return CredentialBinding{}, os.ErrNotExist
-		}
-		return CredentialBinding{Reference: source.reference, Scopes: selected}, nil
-	}
-	return CredentialBinding{}, os.ErrNotExist
-}
-
-func allScopesAllowed(scopes []string, allowed map[string]bool) bool {
-	for _, scope := range scopes {
-		if !allowed[scope] {
-			return false
-		}
-	}
-	return true
-}
-
 func (s *Service) BindingForAuthorizationContextScopeAlternatives(resourceIndicator string, details []map[string]any, alternatives [][]string) (CredentialBinding, error) {
 	sources, err := s.credentialSourcesForResource(resourceIndicator)
 	if err != nil {
@@ -542,11 +466,11 @@ func (s *Service) BindingForAuthorizationContextScopeAlternatives(resourceIndica
 		if !sameAuthorizationDetails(source.source.AuthorizationDetails, details) {
 			continue
 		}
-		offer, ok := leastPrivilegeOffer(source.source.Offers, alternatives)
-		if !ok {
+		binding := bindingForSource(source)
+		if !bindingSatisfiesAlternatives(binding, alternatives) {
 			return CredentialBinding{}, os.ErrNotExist
 		}
-		return CredentialBinding{Reference: source.reference, Scopes: normalizedBindingScopes(offer.Scopes)}, nil
+		return binding, nil
 	}
 	return CredentialBinding{}, os.ErrNotExist
 }
@@ -560,58 +484,16 @@ func (s *Service) BindingForReferenceScopeAlternatives(resourceIndicator, refere
 		if source.reference != reference {
 			continue
 		}
-		offer, ok := leastPrivilegeOffer(source.source.Offers, alternatives)
-		if !ok {
+		binding := bindingForSource(source)
+		if !bindingSatisfiesAlternatives(binding, alternatives) {
 			return CredentialBinding{}, os.ErrNotExist
 		}
-		binding := CredentialBinding{Reference: reference, Scopes: normalizedBindingScopes(offer.Scopes)}
 		if err := s.storeActiveBinding(resourceIndicator, binding); err != nil {
 			return CredentialBinding{}, err
 		}
 		return binding, nil
 	}
 	return CredentialBinding{}, os.ErrNotExist
-}
-
-func (s *Service) BindingForScopeAlternatives(resourceIndicator string, alternatives [][]string) (CredentialBinding, error) {
-	sources, err := s.credentialSourcesForResource(resourceIndicator)
-	if err != nil {
-		return CredentialBinding{}, err
-	}
-	candidates := make([]CredentialBinding, 0, len(sources))
-	for _, source := range sources {
-		offer, ok := leastPrivilegeOffer(source.source.Offers, alternatives)
-		if ok {
-			candidates = append(candidates, CredentialBinding{
-				Reference: source.reference,
-				Scopes:    normalizedBindingScopes(offer.Scopes),
-			})
-		}
-	}
-	if len(candidates) == 0 {
-		return CredentialBinding{}, os.ErrNotExist
-	}
-	active, activeErr := s.activeBinding(resourceIndicator)
-	if activeErr != nil && !errors.Is(activeErr, os.ErrNotExist) {
-		return CredentialBinding{}, activeErr
-	}
-	for _, candidate := range candidates {
-		if candidate.Reference == active.Reference {
-			if !sameStringSet(candidate.Scopes, active.Scopes) {
-				if err := s.storeActiveBinding(resourceIndicator, candidate); err != nil {
-					return CredentialBinding{}, err
-				}
-			}
-			return candidate, nil
-		}
-	}
-	if len(candidates) > 1 {
-		return CredentialBinding{}, fmt.Errorf("%w for Resource Server %q", ErrAuthorizationContextAmbiguous, resourceIndicator)
-	}
-	if err := s.storeActiveBinding(resourceIndicator, candidates[0]); err != nil {
-		return CredentialBinding{}, err
-	}
-	return candidates[0], nil
 }
 
 func (s *Service) credentialSourcesForResource(resourceIndicator string) ([]resourceCredentialSource, error) {
@@ -625,7 +507,7 @@ func (s *Service) credentialSourcesForResource(resourceIndicator string) ([]reso
 			return nil
 		}
 		for reference, source := range state.CredentialSources {
-			if source.ResourceIndicator == resourceIndicator && len(source.Offers) > 0 {
+			if source.ResourceIndicator == resourceIndicator && source.Credential != nil {
 				sources = append(sources, resourceCredentialSource{reference: reference, source: source})
 			}
 		}
@@ -639,25 +521,7 @@ func (s *Service) credentialSourcesForResource(resourceIndicator string) ([]reso
 }
 
 func bindingForSource(source resourceCredentialSource) CredentialBinding {
-	scopes := make([]string, 0)
-	for _, offer := range source.source.Offers {
-		scopes = append(scopes, offer.Scopes...)
-	}
-	return CredentialBinding{Reference: source.reference, Scopes: normalizedBindingScopes(scopes)}
-}
-
-func leastPrivilegeSourceBinding(source resourceCredentialSource) (CredentialBinding, bool) {
-	if len(source.source.Offers) == 0 {
-		return CredentialBinding{}, false
-	}
-	selected := normalizedBindingScopes(source.source.Offers[0].Scopes)
-	for _, offer := range source.source.Offers[1:] {
-		candidate := normalizedBindingScopes(offer.Scopes)
-		if len(candidate) < len(selected) || (len(candidate) == len(selected) && strings.Join(candidate, "\x00") < strings.Join(selected, "\x00")) {
-			selected = candidate
-		}
-	}
-	return CredentialBinding{Reference: source.reference, Scopes: selected}, true
+	return CredentialBinding{Reference: source.reference, Scopes: normalizedBindingScopes(source.source.Credential.Scopes)}
 }
 
 func cloneAuthorizationDetails(details []map[string]any) []map[string]any {
@@ -672,23 +536,13 @@ func cloneAuthorizationDetails(details []map[string]any) []map[string]any {
 	return cloned
 }
 
-func leastPrivilegeOffer(offers []dpopCredential, alternatives [][]string) (dpopCredential, bool) {
-	var selected *dpopCredential
-	for index := range offers {
-		for _, scopes := range alternatives {
-			if len(scopes) == 0 || !scopesContain(offers[index].Scopes, scopes) {
-				continue
-			}
-			if selected == nil || len(offers[index].Scopes) < len(selected.Scopes) {
-				candidate := offers[index]
-				selected = &candidate
-			}
+func bindingSatisfiesAlternatives(binding CredentialBinding, alternatives [][]string) bool {
+	for _, scopes := range alternatives {
+		if len(scopes) > 0 && scopesContain(binding.Scopes, scopes) {
+			return true
 		}
 	}
-	if selected == nil {
-		return dpopCredential{}, false
-	}
-	return *selected, true
+	return false
 }
 
 func normalizedBindingScopes(scopes []string) []string {
@@ -703,8 +557,7 @@ type activeBindings struct {
 }
 
 type activeCredentialBinding struct {
-	Reference string   `json:"reference"`
-	Scopes    []string `json:"scopes"`
+	Reference string `json:"reference"`
 }
 
 func (s *Service) activeBinding(resourceIndicator string) (CredentialBinding, error) {
@@ -718,7 +571,7 @@ func (s *Service) activeBinding(resourceIndicator string) (CredentialBinding, er
 	if err := json.Unmarshal(data, &version); err != nil {
 		return CredentialBinding{}, fmt.Errorf("decode active credential bindings version: %w", err)
 	}
-	if version.Version != 2 {
+	if version.Version != 3 {
 		return CredentialBinding{}, errors.New("active credential bindings have an unsupported version")
 	}
 	var bindings activeBindings
@@ -729,12 +582,12 @@ func (s *Service) activeBinding(resourceIndicator string) (CredentialBinding, er
 	if binding.Reference == "" {
 		return CredentialBinding{}, os.ErrNotExist
 	}
-	return CredentialBinding{Reference: binding.Reference, Scopes: append([]string(nil), binding.Scopes...)}, nil
+	return CredentialBinding{Reference: binding.Reference}, nil
 }
 
 func (s *Service) storeActiveBinding(resourceIndicator string, binding CredentialBinding) error {
 	path := filepath.Join(s.states.root, "bindings.json")
-	bindings := activeBindings{Version: 2, Items: map[string]activeCredentialBinding{}}
+	bindings := activeBindings{Version: 3, Items: map[string]activeCredentialBinding{}}
 	if data, err := os.ReadFile(path); err == nil {
 		var version struct {
 			Version int `json:"version"`
@@ -742,7 +595,7 @@ func (s *Service) storeActiveBinding(resourceIndicator string, binding Credentia
 		if err := json.Unmarshal(data, &version); err != nil {
 			return fmt.Errorf("decode active credential bindings version: %w", err)
 		}
-		if version.Version != 2 {
+		if version.Version != 3 {
 			return errors.New("active credential bindings have an unsupported version")
 		}
 		if err := json.Unmarshal(data, &bindings); err != nil {
@@ -751,11 +604,11 @@ func (s *Service) storeActiveBinding(resourceIndicator string, binding Credentia
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	bindings.Version = 2
+	bindings.Version = 3
 	if bindings.Items == nil {
 		bindings.Items = make(map[string]activeCredentialBinding)
 	}
-	bindings.Items[resourceIndicator] = activeCredentialBinding{Reference: binding.Reference, Scopes: normalizedBindingScopes(binding.Scopes)}
+	bindings.Items[resourceIndicator] = activeCredentialBinding{Reference: binding.Reference}
 	data, err := json.MarshalIndent(bindings, "", "  ")
 	if err != nil {
 		return err
