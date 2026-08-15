@@ -41,6 +41,12 @@ type contextSelectionResult struct {
 	Current        bool   `json:"current"`
 }
 
+type contextUnavailableError struct{ name string }
+
+func (e contextUnavailableError) Error() string {
+	return fmt.Sprintf("Context %q is not available", e.name)
+}
+
 func listContexts(details []catalog.AuthorizationDetail, selected []map[string]any) []contextListItem {
 	result := make([]contextListItem, 0, len(details))
 	for _, detail := range details {
@@ -122,6 +128,10 @@ func (a *App) resolveContext(service *agent.Service, server catalog.ResourceServ
 	if name != "" {
 		detail, err := namedContext(details, name)
 		if err != nil {
+			var unavailable contextUnavailableError
+			if errors.As(err, &unavailable) {
+				return nil, fmt.Errorf("%w; connect or update it in Realmroot Connections: %s/connections", err, service.Origin())
+			}
 			return nil, err
 		}
 		return []map[string]any{detail.AuthorizationDetail}, nil
@@ -162,14 +172,26 @@ func disconnectedAuthorizationDetails(server catalog.ResourceServer) []map[strin
 }
 
 func namedContext(details []catalog.AuthorizationDetail, name string) (catalog.AuthorizationDetail, error) {
-	var matches []catalog.AuthorizationDetail
+	var exactMatches []catalog.AuthorizationDetail
 	for _, detail := range details {
 		if detail.Name == name {
+			exactMatches = append(exactMatches, detail)
+		}
+	}
+	if len(exactMatches) == 1 {
+		return exactMatches[0], nil
+	}
+	if len(exactMatches) > 1 {
+		return catalog.AuthorizationDetail{}, fmt.Errorf("Context name %q is ambiguous", name)
+	}
+	var matches []catalog.AuthorizationDetail
+	for _, detail := range details {
+		if strings.EqualFold(detail.Name, name) {
 			matches = append(matches, detail)
 		}
 	}
 	if len(matches) == 0 {
-		return catalog.AuthorizationDetail{}, fmt.Errorf("Context %q is not available", name)
+		return catalog.AuthorizationDetail{}, contextUnavailableError{name: name}
 	}
 	if len(matches) > 1 {
 		return catalog.AuthorizationDetail{}, fmt.Errorf("Context name %q is ambiguous", name)

@@ -111,6 +111,13 @@ Feature: Realmroot Toolbox command line
     And it immediately returns the pending status and approval URL
     And the same URL continues through account connection, Context selection, and Permission approval
 
+  @journey:missing-context-guidance @entrypoint:agent-request
+  Scenario: A named Context must already exist
+    Given the requested Context name is not published by the Resource Server
+    When the Agent requests Resource access with that Context name
+    Then Toolbox does not create an access request
+    And directs the controller to Realmroot Connections to connect or update it manually
+
   @journey:direct-resource-operation @entrypoint:toolbox-operation
   Scenario: Invoke an OpenAPI-generated Resource operation
     Given one current cumulative credential is stored for each approved Resource Context

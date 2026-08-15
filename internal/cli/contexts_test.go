@@ -58,3 +58,55 @@ func TestResolveContextUsesResourceTemplatesBeforeTheAccountIsConnected(t *testi
 		t.Fatalf("selected Context = %#v", selected)
 	}
 }
+
+func TestResolveContextGuidesAMissingNamedContextToConnections(t *testing.T) {
+	// [spec: cli/missing-context-guidance]
+	t.Setenv("REALMROOT_STATE_DIR", t.TempDir())
+	service, err := agent.NewService("https://id.example.com", http.DefaultClient)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := catalog.ResourceServer{
+		CommandName: "github", ResourceURL: "https://api.example.com", ConnectionStatus: "connected",
+	}
+	existing := []catalog.AuthorizationDetail{{
+		Name: "existing-org", AuthorizationDetail: map[string]any{"type": "installation", "installation_id": "701"},
+	}}
+
+	selected, err := (&App{}).resolveContext(service, server, existing, "new-org")
+	if selected != nil || err == nil {
+		t.Fatalf("selected=%#v err=%v", selected, err)
+	}
+	want := `Context "new-org" is not available; connect or update it in Realmroot Connections: https://id.example.com/connections`
+	if err.Error() != want {
+		t.Fatalf("error = %q, want %q", err, want)
+	}
+}
+
+func TestNamedContextUsesAUniqueCaseInsensitiveProviderName(t *testing.T) {
+	detail := catalog.AuthorizationDetail{
+		Name:                "wakatoken",
+		AuthorizationDetail: map[string]any{"type": "installation", "installation_id": "702"},
+	}
+	selected, err := namedContext([]catalog.AuthorizationDetail{detail}, "WakaToken")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameDetails(detail.AuthorizationDetail, []map[string]any{selected.AuthorizationDetail}) {
+		t.Fatalf("selected Context = %#v", selected)
+	}
+}
+
+func TestNamedContextPrefersExactCaseAndRejectsFoldedAmbiguity(t *testing.T) {
+	details := []catalog.AuthorizationDetail{
+		{Name: "wakatoken", AuthorizationDetail: map[string]any{"installation_id": "701"}},
+		{Name: "WakaToken", AuthorizationDetail: map[string]any{"installation_id": "702"}},
+	}
+	selected, err := namedContext(details, "WakaToken")
+	if err != nil || selected.AuthorizationDetail["installation_id"] != "702" {
+		t.Fatalf("exact selected=%#v err=%v", selected, err)
+	}
+	if _, err := namedContext(details, "WAKATOKEN"); err == nil || err.Error() != `Context name "WAKATOKEN" is ambiguous` {
+		t.Fatalf("folded ambiguity error = %v", err)
+	}
+}
