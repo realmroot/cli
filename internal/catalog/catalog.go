@@ -14,8 +14,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/realmroot/toolbox/internal/agent"
-	"github.com/realmroot/toolbox/internal/realmrootapi"
+	"github.com/realmroot/cli/internal/agent"
+	"github.com/realmroot/cli/internal/realmrootapi"
 	restish "github.com/saltbo/restish/v2"
 )
 

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/realmroot/toolbox/internal/agent"
+	"github.com/realmroot/cli/internal/agent"
 )
 
 func TestResourceServerCommandName(t *testing.T) {

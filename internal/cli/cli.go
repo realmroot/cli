@@ -14,12 +14,12 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/realmroot/toolbox/internal/access"
-	"github.com/realmroot/toolbox/internal/agent"
-	"github.com/realmroot/toolbox/internal/buildinfo"
-	"github.com/realmroot/toolbox/internal/catalog"
-	"github.com/realmroot/toolbox/internal/execution"
-	"github.com/realmroot/toolbox/internal/observability"
+	"github.com/realmroot/cli/internal/access"
+	"github.com/realmroot/cli/internal/agent"
+	"github.com/realmroot/cli/internal/buildinfo"
+	"github.com/realmroot/cli/internal/catalog"
+	"github.com/realmroot/cli/internal/execution"
+	"github.com/realmroot/cli/internal/observability"
 	restish "github.com/saltbo/restish/v2"
 	"github.com/spf13/cobra"
 )

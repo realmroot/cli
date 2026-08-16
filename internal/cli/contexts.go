@@ -10,8 +10,8 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/realmroot/toolbox/internal/agent"
-	"github.com/realmroot/toolbox/internal/catalog"
+	"github.com/realmroot/cli/internal/agent"
+	"github.com/realmroot/cli/internal/catalog"
 )
 
 type contextSummary struct {

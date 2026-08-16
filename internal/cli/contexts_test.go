@@ -6,8 +6,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/realmroot/toolbox/internal/agent"
-	"github.com/realmroot/toolbox/internal/catalog"
+	"github.com/realmroot/cli/internal/agent"
+	"github.com/realmroot/cli/internal/catalog"
 )
 
 func TestResolveContextClearsAStaleSelectionWhenTheCatalogIsEmpty(t *testing.T) {

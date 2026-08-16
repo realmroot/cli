@@ -3,7 +3,7 @@
 VERSION ?= dev
 COMMIT ?= $(shell git describe --always --dirty 2>/dev/null)
 BUILD_TIME ?=
-LDFLAGS := -X github.com/realmroot/toolbox/internal/buildinfo.Version=$(VERSION) -X github.com/realmroot/toolbox/internal/buildinfo.Commit=$(COMMIT) -X github.com/realmroot/toolbox/internal/buildinfo.BuildTime=$(BUILD_TIME)
+LDFLAGS := -X github.com/realmroot/cli/internal/buildinfo.Version=$(VERSION) -X github.com/realmroot/cli/internal/buildinfo.Commit=$(COMMIT) -X github.com/realmroot/cli/internal/buildinfo.BuildTime=$(BUILD_TIME)
 
 generate:
 	test -n "$(REALMROOT_OPENAPI)"

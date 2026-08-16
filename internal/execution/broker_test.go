@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/realmroot/toolbox/internal/catalog"
+	"github.com/realmroot/cli/internal/catalog"
 	restish "github.com/saltbo/restish/v2"
 )
 

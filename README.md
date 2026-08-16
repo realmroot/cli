@@ -20,7 +20,7 @@ downloads against the published `checksums.txt` before installing the
 Go developers can install directly from the module:
 
 ```console
-go install github.com/realmroot/toolbox@latest
+go install github.com/realmroot/cli@latest
 ```
 
 To build the current checkout instead:

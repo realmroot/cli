@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/realmroot/toolbox/internal/cli"
+	"github.com/realmroot/cli/internal/cli"
 )
 
 func main() {

@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/realmroot/toolbox/internal/agent"
-	"github.com/realmroot/toolbox/internal/catalog"
-	"github.com/realmroot/toolbox/internal/observability"
+	"github.com/realmroot/cli/internal/agent"
+	"github.com/realmroot/cli/internal/catalog"
+	"github.com/realmroot/cli/internal/observability"
 )
 
 type Runner struct {

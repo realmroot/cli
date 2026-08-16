@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/realmroot/toolbox/internal/catalog"
-	"github.com/realmroot/toolbox/internal/realmrootapi"
+	"github.com/realmroot/cli/internal/catalog"
+	"github.com/realmroot/cli/internal/realmrootapi"
 )
 
 var (

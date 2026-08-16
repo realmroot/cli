@@ -19,9 +19,9 @@ builds:
       - -trimpath
     ldflags:
       - -s -w
-      - -X github.com/realmroot/toolbox/internal/buildinfo.Version=v{{ .Version }}
-      - -X github.com/realmroot/toolbox/internal/buildinfo.Commit={{ .Commit }}
-      - -X github.com/realmroot/toolbox/internal/buildinfo.BuildTime={{ .CommitDate }}
+      - -X github.com/realmroot/cli/internal/buildinfo.Version=v{{ .Version }}
+      - -X github.com/realmroot/cli/internal/buildinfo.Commit={{ .Commit }}
+      - -X github.com/realmroot/cli/internal/buildinfo.BuildTime={{ .CommitDate }}
     mod_timestamp: "{{ .CommitTimestamp }}"
 
 archives:
