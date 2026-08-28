@@ -20,8 +20,13 @@ func TestSupportedProtocolAlternativeSeparatesEnrollmentFromResourceOAuth(t *tes
 		},
 		{
 			name:         "Resource OAuth scheme with an Agent bootstrap scope",
-			requirements: []authRequirement{{ID: "oauth2", Kind: "oauth2-dpop", Needs: []string{"resource-servers:read"}}},
+			requirements: []authRequirement{{ID: "oauth2", Kind: "oauth2", Needs: []string{"resource-servers:read"}}},
 			want:         true,
+		},
+		{
+			name:         "obsolete OAuth DPoP extension kind",
+			requirements: []authRequirement{{ID: "oauth2", Kind: "oauth2-dpop", Needs: []string{"resource-servers:read"}}},
+			want:         false,
 		},
 		{
 			name:         "Agent enrollment assertion",

@@ -121,10 +121,11 @@ Feature: Realmroot Toolbox command line
   @journey:direct-resource-operation @entrypoint:toolbox-operation
   Scenario: Invoke an OpenAPI-generated Resource operation
     Given one current cumulative credential is stored for each approved Resource Context
+    And the Resource Server publishes standard OAuth 2.0 security requirements
     When the Agent invokes the generated Toolbox operation
     Then Toolbox uses the selected Context's current cumulative authority
     And it never selects among historical access-request credentials
-    And Restish sends the request directly to the Resource Server with the selected proof-bound credential
+    And Restish sends the request directly to the Resource Server with the selected DPoP-bound credential
     And missing authority is reported using Realmroot Resource Server and scope vocabulary
     But embedded engine profiles, credential bindings, and setup commands are never exposed
 
