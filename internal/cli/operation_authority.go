@@ -294,7 +294,7 @@ func bindProfileCredentials(
 	for _, candidate := range inspection.Operations {
 		for _, alternative := range candidate.CredentialAlternatives {
 			for _, requirement := range alternative {
-				if requirement.Kind != "oauth2" {
+				if !standardOAuthCredentialKind(requirement.Kind) {
 					continue
 				}
 				profile.Credentials[requirement.ID] = &restishconfig.CredentialConfig{
@@ -312,7 +312,7 @@ func operationCredentialScopeAlternatives(operation restish.OperationInspection)
 		scopes := make([]string, 0)
 		supported := len(alternative) > 0
 		for _, requirement := range alternative {
-			if requirement.Kind != "oauth2" {
+			if !standardOAuthCredentialKind(requirement.Kind) {
 				supported = false
 				break
 			}
@@ -335,6 +335,10 @@ func uniqueOperationScopes(scopes []string) []string {
 		}
 	}
 	return result
+}
+
+func standardOAuthCredentialKind(kind string) bool {
+	return kind == "oauth2" || kind == "openid"
 }
 
 func invocationRequiresAuthority(args []string) bool {
@@ -379,7 +383,7 @@ func operationCoveredByScopes(operation restish.OperationInspection, scopes []st
 	for _, alternative := range operation.CredentialAlternatives {
 		covered := len(alternative) > 0
 		for _, requirement := range alternative {
-			if requirement.Kind != "oauth2" {
+			if !standardOAuthCredentialKind(requirement.Kind) {
 				covered = false
 				break
 			}
