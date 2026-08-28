@@ -526,6 +526,32 @@ func TestOperationScopeAlternativesPreserveOAuthAlternatives(t *testing.T) {
 	}
 }
 
+func TestOperationAuthoritySupportsStandardOpenIDKind(t *testing.T) {
+	operation := restish.OperationInspection{
+		ID: "listProjects",
+		CredentialAlternatives: [][]restish.CredentialRequirementInspection{{{
+			ID: "realmrootOidc", Kind: "openid", Needs: []string{"projects:read"},
+		}}},
+	}
+	if got := operationCredentialScopeAlternatives(operation); len(got) != 1 || strings.Join(got[0], " ") != "projects:read" {
+		t.Fatalf("scope alternatives = %#v", got)
+	}
+	if !operationCoveredByScopes(operation, []string{"projects:read"}) {
+		t.Fatal("standard OpenID requirement not covered by matching authority")
+	}
+
+	config := &restish.Config{APIs: map[string]*restish.APIConfig{"ama": {}}}
+	inspection := restish.APIInspection{Operations: []restish.OperationInspection{operation}}
+	binding := agent.CredentialBinding{Reference: "selected-reference", Scopes: []string{"projects:read"}}
+	if err := bindProfileCredentials(config, catalog.ResourceServer{CommandName: "ama"}, inspection, "default", binding); err != nil {
+		t.Fatal(err)
+	}
+	credential := config.APIs["ama"].Profiles["default"].Credentials["realmrootOidc"]
+	if credential == nil || credential.Auth == nil || credential.Auth.Type != "dpop" {
+		t.Fatalf("credential = %#v", credential)
+	}
+}
+
 func TestOperationAuthorityRejectsObsoleteOAuthDPoPKind(t *testing.T) {
 	operation := restish.OperationInspection{CredentialAlternatives: [][]restish.CredentialRequirementInspection{{{
 		ID: "oauth2", Kind: "oauth2-dpop", Needs: []string{"applications:read"},
