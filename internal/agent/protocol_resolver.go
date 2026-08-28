@@ -106,7 +106,7 @@ func supportedProtocolAlternative(requirements []authRequirement) bool {
 	switch requirements[0].ID {
 	case oauth2SchemeID:
 		switch requirements[0].Kind {
-		case "oauth2-dpop", "oauth2", "openid":
+		case "oauth2", "openid":
 			return true
 		}
 	case agentAssertionSchemeID:

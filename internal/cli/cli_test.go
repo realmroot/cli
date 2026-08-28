@@ -507,13 +507,14 @@ func TestSelectedGenericOperationUsesConfiguredOperationBase(t *testing.T) {
 }
 
 func TestBindProfileCredentialsSupportsGenericHTTPRequests(t *testing.T) {
+	// [spec: cli/direct-resource-operation]
 	config := &restish.Config{APIs: map[string]*restish.APIConfig{"platform": {}}}
 	binding := agent.CredentialBinding{Reference: "selected-reference", Scopes: []string{"resource-servers:read"}}
 	if err := bindProfileCredentials(config, catalog.ResourceServer{CommandName: "platform"}, githubOperationInspection(), "default", binding); err != nil {
 		t.Fatal(err)
 	}
 	credential := config.APIs["platform"].Profiles["default"].Credentials["realmrootOidc"]
-	if credential == nil || credential.Auth == nil || credential.Auth.Params["reference"] != binding.Reference || strings.Join(credential.Satisfies, " ") != "resource-servers:read" {
+	if credential == nil || credential.Auth == nil || credential.Auth.Type != "dpop" || credential.Auth.Params["reference"] != binding.Reference || strings.Join(credential.Satisfies, " ") != "resource-servers:read" {
 		t.Fatalf("credential = %#v", credential)
 	}
 }
@@ -522,6 +523,18 @@ func TestOperationScopeAlternativesPreserveOAuthAlternatives(t *testing.T) {
 	operation := githubOperationInspection().Operations[0]
 	if got := operationCredentialScopeAlternatives(operation); len(got) != 2 || strings.Join(got[0], " ") != "issues:read" || strings.Join(got[1], " ") != "metadata:read" {
 		t.Fatalf("scope alternatives = %#v", got)
+	}
+}
+
+func TestOperationAuthorityRejectsObsoleteOAuthDPoPKind(t *testing.T) {
+	operation := restish.OperationInspection{CredentialAlternatives: [][]restish.CredentialRequirementInspection{{{
+		ID: "oauth2", Kind: "oauth2-dpop", Needs: []string{"applications:read"},
+	}}}}
+	if got := operationCredentialScopeAlternatives(operation); len(got) != 0 {
+		t.Fatalf("obsolete scope alternatives = %#v", got)
+	}
+	if operationCoveredByScopes(operation, []string{"applications:read"}) {
+		t.Fatal("obsolete OAuth DPoP extension kind accepted Agent authority")
 	}
 }
 
@@ -650,8 +663,8 @@ func githubOperationInspection() restish.APIInspection {
 	return restish.APIInspection{Operations: []restish.OperationInspection{{
 		ID: "issuesGet", Command: []string{"issues", "issues-get"}, Method: "GET", Path: "/repos/{owner}/{repo}/issues/{number}",
 		CredentialAlternatives: [][]restish.CredentialRequirementInspection{
-			{{ID: "realmrootOidc", Kind: "oauth2-dpop", Needs: []string{"issues:read"}}},
-			{{ID: "realmrootOidc", Kind: "oauth2-dpop", Needs: []string{"metadata:read"}}},
+			{{ID: "realmrootOidc", Kind: "oauth2", Needs: []string{"issues:read"}}},
+			{{ID: "realmrootOidc", Kind: "oauth2", Needs: []string{"metadata:read"}}},
 		},
 	}}}
 }
@@ -770,8 +783,8 @@ func TestScopeFilterKeepsOnlyMatchingScopeAlternativesAndHidesCredentialSchemes(
 	operations := []restish.OperationInspection{{
 		ID: "getContent", Command: []string{"repos", "get-content"}, Method: "GET", Path: "/repos/{owner}/{repo}/contents/{path}",
 		CredentialAlternatives: [][]restish.CredentialRequirementInspection{
-			{{ID: "realmrootOidc", Kind: "oauth2-dpop", Needs: []string{"contents:read"}}},
-			{{ID: "realmrootOidc", Kind: "oauth2-dpop", Needs: []string{"metadata:read"}}},
+			{{ID: "realmrootOidc", Kind: "oauth2", Needs: []string{"contents:read"}}},
+			{{ID: "realmrootOidc", Kind: "oauth2", Needs: []string{"metadata:read"}}},
 		},
 	}}
 	overview := buildResourceServerOverview(catalog.ResourceServer{CommandName: "github"}, nil, operations, discoveryOptions{Scope: "contents:read"})
@@ -783,7 +796,7 @@ func TestScopeFilterKeepsOnlyMatchingScopeAlternativesAndHidesCredentialSchemes(
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, internal := range []string{"realmrootOidc", "oauth2-dpop", "metadata:read", "credentialAlternatives"} {
+	for _, internal := range []string{"realmrootOidc", "metadata:read", "credentialAlternatives"} {
 		if strings.Contains(string(encoded), internal) {
 			t.Fatalf("overview JSON exposed %q: %s", internal, encoded)
 		}

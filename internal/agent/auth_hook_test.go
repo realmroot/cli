@@ -132,7 +132,7 @@ func TestEnrollmentAuthRegistersAgentThenWhoamiUsesTheEnrolledIdentity(t *testin
 
 	whoami := authHookEnvelope{
 		API: "realmroot", Profile: "default",
-		Requirements: []authRequirement{{ID: oauth2SchemeID, Kind: "oauth2-dpop", Needs: []string{"agent:read"}}},
+		Requirements: []authRequirement{{ID: oauth2SchemeID, Kind: "oauth2", Needs: []string{"agent:read"}}},
 		Request:      plugin.HookRequest{Method: http.MethodGet, URI: "https://auth.example.com/api/agent"},
 	}
 	output, err = authenticateHookRequest(whoami, states, client, prompt)
@@ -166,7 +166,7 @@ func testWhoamiWithoutLocalRegistrationRequiresExplicitEnrollment(t *testing.T) 
 	prompt := &promptRecorder{}
 	_, err := authenticateHookRequest(authHookEnvelope{
 		API: "realmroot", Profile: "default",
-		Requirements: []authRequirement{{ID: oauth2SchemeID, Kind: "oauth2-dpop", Needs: []string{"agent:read"}}},
+		Requirements: []authRequirement{{ID: oauth2SchemeID, Kind: "oauth2", Needs: []string{"agent:read"}}},
 		Request:      plugin.HookRequest{Method: http.MethodGet, URI: "https://auth.example.com/api/agent"},
 	}, &memoryStateStore{}, client, prompt)
 	if err == nil || !strings.Contains(err.Error(), "realmroot agent enroll") {
