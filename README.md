@@ -6,6 +6,71 @@ Users install one command and do not need a separate plugin or runtime.
 
 ## Install
 
+Webi installs the prebuilt binary on macOS, Linux, or Windows without Go, npm,
+Homebrew, or another language toolchain. On macOS or Linux:
+
+```console
+curl -sS https://webi.sh/realmroot | sh
+```
+
+On Windows, from PowerShell:
+
+```powershell
+curl.exe -fsSA "MS" https://webi.ms/realmroot | powershell
+```
+
+Open a new shell after installation, or load Webi's environment in the current
+POSIX shell with `source ~/.config/envman/PATH.env`. Confirm the installed build
+with `realmroot version`.
+
+To upgrade to the latest stable release or select an explicit released version:
+
+```console
+webi realmroot@stable
+webi realmroot@0.4.2
+```
+
+Webi selects the release archive for the current operating system and
+architecture and verifies it against that release's `checksums.txt` before
+extracting it. Supported targets are macOS, Linux, and Windows on amd64 and
+arm64.
+
+The `webi.sh/realmroot` and `webi.ms/realmroot` URLs become available only
+after the Realmroot package is merged into
+[`webinstall/webi-installers`](https://github.com/webinstall/webi-installers)
+and deployed by Webi. Until then, automation can use the Realmroot-owned bridge
+installer from the immutable commit below. Pin both the installer commit and
+the CLI release version; `stable` intentionally follows future releases.
+
+On macOS or Linux:
+
+```console
+curl -fsSLo /tmp/install-realmroot.sh \
+  https://raw.githubusercontent.com/realmroot/cli/a6451ece639d24b46b11e16dac4b0ee0d9d1b8bb/scripts/install-realmroot.sh
+echo '96c47a9d9295654c6110446a42194af47f22f8c9a6606689749bc0a50acb31c6  /tmp/install-realmroot.sh' \
+  | shasum -a 256 -c -
+REALMROOT_VERSION=0.4.2 sh /tmp/install-realmroot.sh
+```
+
+On Windows PowerShell:
+
+```powershell
+$installer = "$Env:TEMP\install-realmroot.ps1"
+Invoke-WebRequest `
+  https://raw.githubusercontent.com/realmroot/cli/a6451ece639d24b46b11e16dac4b0ee0d9d1b8bb/scripts/install-realmroot.ps1 `
+  -OutFile $installer
+if ((Get-FileHash $installer -Algorithm SHA256).Hash.ToLowerInvariant() -ne `
+    '8eebe604e181d27ec0425b76ab949386174b3af9db493ebf8ab17bc0a6dbbaa0') {
+  throw 'Realmroot installer checksum mismatch'
+}
+& $installer -Version 0.4.2
+```
+
+These bridge installers use the same `~/.local` versioned layout as Webi and
+fail before extraction unless the archive matches the selected GitHub
+release's `checksums.txt`. They are not aliases for the pending Webi package;
+switch automation to the canonical Webi URLs after the upstream deployment.
+
 Homebrew installs a prebuilt macOS or Linux binary and does not require Go:
 
 ```console
