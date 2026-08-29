@@ -38,38 +38,27 @@ arm64.
 The `webi.sh/realmroot` and `webi.ms/realmroot` URLs become available only
 after the Realmroot package is merged into
 [`webinstall/webi-installers`](https://github.com/webinstall/webi-installers)
-and deployed by Webi. Until then, automation can use the Realmroot-owned bridge
-installer from the immutable commit below. Pin both the installer commit and
-the CLI release version; `stable` intentionally follows future releases.
+and deployed by Webi.
 
-On macOS or Linux:
+Before that deployment, AMA can keep its declarative package pinned as
+`realmroot@0.4.2` and use Realmroot's temporary static origin:
 
 ```console
-curl -fsSLo /tmp/install-realmroot.sh \
-  https://raw.githubusercontent.com/realmroot/cli/a6451ece639d24b46b11e16dac4b0ee0d9d1b8bb/scripts/install-realmroot.sh
-echo '96c47a9d9295654c6110446a42194af47f22f8c9a6606689749bc0a50acb31c6  /tmp/install-realmroot.sh' \
-  | shasum -a 256 -c -
-REALMROOT_VERSION=0.4.2 sh /tmp/install-realmroot.sh
+export AMA_WEBI_ORIGIN=https://raw.githubusercontent.com/realmroot/cli/0766e4c2c96b97e86eb30400ada3094106b144aa/packaging/webi/origin
 ```
 
-On Windows PowerShell:
+The complete installer is therefore fetched from
+`$AMA_WEBI_ORIGIN/realmroot@0.4.2`. Its SHA-256 digest is
+`02599b467d05b00862f0e5edfecaad6fb63901e0ef8c1399897d38eed29723a6`.
+The immutable Git commit pins the installer implementation, and the package
+suffix pins the CLI release. The generated installer rejects version
+overrides and fails before extraction unless the selected archive matches
+release `v0.4.2`'s `checksums.txt`.
 
-```powershell
-$installer = "$Env:TEMP\install-realmroot.ps1"
-Invoke-WebRequest `
-  https://raw.githubusercontent.com/realmroot/cli/a6451ece639d24b46b11e16dac4b0ee0d9d1b8bb/scripts/install-realmroot.ps1 `
-  -OutFile $installer
-if ((Get-FileHash $installer -Algorithm SHA256).Hash.ToLowerInvariant() -ne `
-    '8eebe604e181d27ec0425b76ab949386174b3af9db493ebf8ab17bc0a6dbbaa0') {
-  throw 'Realmroot installer checksum mismatch'
-}
-& $installer -Version 0.4.2
-```
-
-These bridge installers use the same `~/.local` versioned layout as Webi and
-fail before extraction unless the archive matches the selected GitHub
-release's `checksums.txt`. They are not aliases for the pending Webi package;
-switch automation to the canonical Webi URLs after the upstream deployment.
+This origin is a committed static artifact, not a custom Webinstall service.
+After the upstream Webi deployment, AMA changes only `AMA_WEBI_ORIGIN` to
+`https://webi.sh`; `realmroot@0.4.2` and the installed resource data remain
+unchanged.
 
 Homebrew installs a prebuilt macOS or Linux binary and does not require Go:
 
