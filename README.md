@@ -6,6 +6,43 @@ Users install one command and do not need a separate plugin or runtime.
 
 ## Install
 
+Webi installs the prebuilt binary on macOS, Linux, or Windows without Go, npm,
+Homebrew, or another language toolchain. On macOS or Linux:
+
+```console
+curl -sS https://webi.sh/realmroot | sh
+```
+
+On Windows, from PowerShell:
+
+```powershell
+curl.exe -fsSA "MS" https://webi.ms/realmroot | powershell
+```
+
+Open a new shell after installation, or load Webi's environment in the current
+POSIX shell with `source ~/.config/envman/PATH.env`. Confirm the installed build
+with `realmroot version`.
+
+To upgrade to the latest stable release or select an explicit released version:
+
+```console
+webi realmroot@stable
+webi realmroot@0.4.2
+```
+
+Webi selects the release archive for the current operating system and
+architecture and verifies it against that release's `checksums.txt` before
+extracting it. Supported targets are macOS, Linux, and Windows on amd64 and
+arm64.
+
+The `webi.sh/realmroot` and `webi.ms/realmroot` URLs become available only
+after the Realmroot package is merged into
+[`webinstall/webi-installers`](https://github.com/webinstall/webi-installers)
+and deployed by Webi.
+There is no Realmroot-hosted Webi origin or pre-deployment installer endpoint.
+Use the GitHub release archives directly, with `checksums.txt` verification,
+until the official Webi deployment is available.
+
 Homebrew installs a prebuilt macOS or Linux binary and does not require Go:
 
 ```console

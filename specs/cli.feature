@@ -6,6 +6,8 @@ Feature: Realmroot Toolbox command line
     When the release workflow publishes that version
     Then macOS, Linux, and Windows archives are available with checksums
     And macOS users can install the same version from the maintained Homebrew Tap
+    And Webi can install the stable or an explicit version on amd64 and arm64
+    And Webi verifies the published checksum before extracting the archive
 
   @journey:cli-version @entrypoint:version
   Scenario: Inspect the installed Toolbox build
