@@ -39,26 +39,9 @@ The `webi.sh/realmroot` and `webi.ms/realmroot` URLs become available only
 after the Realmroot package is merged into
 [`webinstall/webi-installers`](https://github.com/webinstall/webi-installers)
 and deployed by Webi.
-
-Before that deployment, AMA can keep its declarative package pinned as
-`realmroot@0.4.2` and use Realmroot's temporary static origin:
-
-```console
-export AMA_WEBI_ORIGIN=https://raw.githubusercontent.com/realmroot/cli/0766e4c2c96b97e86eb30400ada3094106b144aa/packaging/webi/origin
-```
-
-The complete installer is therefore fetched from
-`$AMA_WEBI_ORIGIN/realmroot@0.4.2`. Its SHA-256 digest is
-`02599b467d05b00862f0e5edfecaad6fb63901e0ef8c1399897d38eed29723a6`.
-The immutable Git commit pins the installer implementation, and the package
-suffix pins the CLI release. The generated installer rejects version
-overrides and fails before extraction unless the selected archive matches
-release `v0.4.2`'s `checksums.txt`.
-
-This origin is a committed static artifact, not a custom Webinstall service.
-After the upstream Webi deployment, AMA changes only `AMA_WEBI_ORIGIN` to
-`https://webi.sh`; `realmroot@0.4.2` and the installed resource data remain
-unchanged.
+There is no Realmroot-hosted Webi origin or pre-deployment installer endpoint.
+Use the GitHub release archives directly, with `checksums.txt` verification,
+until the official Webi deployment is available.
 
 Homebrew installs a prebuilt macOS or Linux binary and does not require Go:
 
