@@ -19,15 +19,57 @@ jobs:
           cache: true
       - run: go test ./...
       - run: go vet ./...
-      - run: go build ./...
       - uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
           version: v2.17.1
           args: check
+
+  build-matrix:
+    name: build (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        goos: [darwin, linux, windows]
+        goarch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: mkdir build
       - uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
           version: v2.17.1
-          args: --parallelism 2 release --snapshot --clean
-      - run: ./scripts/verify-release-assets.sh dist
+          args: >-
+            build --single-target --snapshot --clean
+            --output build/realmroot_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }}
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: realmroot-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: build/realmroot_*
+          if-no-files-found: error
+
+  verify-build-matrix:
+    runs-on: ubuntu-latest
+    needs: build-matrix
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: realmroot-*
+          path: build
+          merge-multiple: true
+      - run: ./scripts/verify-build-matrix.sh build
