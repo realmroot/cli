@@ -398,7 +398,11 @@ func TestPrepareOperationCredentialsBindsOpenAPICredentialID(t *testing.T) {
 	}
 	profile := config.APIs["github"].Profiles["default"]
 	credential := profile.Credentials["realmrootOidc"]
-	if profile.Auth != nil || credential == nil || credential.Auth == nil || credential.Auth.Type != "dpop" {
+	if credential == nil {
+		t.Fatalf("profile = %#v", profile)
+	}
+	auth := config.AuthProfiles[credential.AuthRef]
+	if profile.Auth != nil || credential.Auth != nil || auth == nil || auth.Type != "dpop" {
 		t.Fatalf("profile = %#v", profile)
 	}
 	if strings.Join(credential.Satisfies, " ") != "issues:read" {
@@ -418,7 +422,11 @@ func TestPrepareOperationCredentialsReplacesStaleProfileReference(t *testing.T) 
 		t.Fatal(err)
 	}
 	credential := config.APIs["github"].Profiles["default"].Credentials["realmrootOidc"]
-	if credential == nil || credential.Auth == nil || credential.Auth.Params["reference"] != "selected-reference" {
+	if credential == nil {
+		t.Fatal("credential was not bound")
+	}
+	auth := config.AuthProfiles[credential.AuthRef]
+	if credential.Auth != nil || auth == nil || auth.Params["reference"] != "selected-reference" {
 		t.Fatalf("credential = %#v", credential)
 	}
 }
@@ -514,8 +522,31 @@ func TestBindProfileCredentialsSupportsGenericHTTPRequests(t *testing.T) {
 		t.Fatal(err)
 	}
 	credential := config.APIs["platform"].Profiles["default"].Credentials["realmrootOidc"]
-	if credential == nil || credential.Auth == nil || credential.Auth.Type != "dpop" || credential.Auth.Params["reference"] != binding.Reference || strings.Join(credential.Satisfies, " ") != "resource-servers:read" {
+	if credential == nil {
+		t.Fatal("credential was not bound")
+	}
+	auth := config.AuthProfiles[credential.AuthRef]
+	if credential.Auth != nil || auth == nil || auth.Type != "dpop" || auth.Params["reference"] != binding.Reference || strings.Join(credential.Satisfies, " ") != "resource-servers:read" {
 		t.Fatalf("credential = %#v", credential)
+	}
+}
+
+func TestBindProfileCredentialsSeparatesRestishTokensByAgentSession(t *testing.T) {
+	t.Setenv("AGENT", "codex")
+	binding := agent.CredentialBinding{Reference: "selected-reference", Scopes: []string{"issues:read"}}
+	bind := func(sessionID string) string {
+		t.Helper()
+		t.Setenv("CODEX_THREAD_ID", sessionID)
+		config := &restish.Config{APIs: map[string]*restish.APIConfig{"github": {}}}
+		if err := bindProfileCredentials(config, catalog.ResourceServer{CommandName: "github"}, githubOperationInspection(), "default", binding); err != nil {
+			t.Fatal(err)
+		}
+		return config.APIs["github"].Profiles["default"].Credentials["realmrootOidc"].AuthRef
+	}
+	first := bind("thread-secret-1")
+	second := bind("thread-secret-2")
+	if first == second || strings.Contains(first, "thread-secret") || strings.Contains(second, "thread-secret") {
+		t.Fatalf("session auth references = %q, %q", first, second)
 	}
 }
 
@@ -547,7 +578,11 @@ func TestOperationAuthoritySupportsStandardOpenIDKind(t *testing.T) {
 		t.Fatal(err)
 	}
 	credential := config.APIs["ama"].Profiles["default"].Credentials["realmrootOidc"]
-	if credential == nil || credential.Auth == nil || credential.Auth.Type != "dpop" {
+	if credential == nil {
+		t.Fatal("credential was not bound")
+	}
+	auth := config.AuthProfiles[credential.AuthRef]
+	if credential.Auth != nil || auth == nil || auth.Type != "dpop" {
 		t.Fatalf("credential = %#v", credential)
 	}
 }

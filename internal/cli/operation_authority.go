@@ -287,6 +287,15 @@ func bindProfileCredentials(
 	auth := &restish.AuthConfig{Type: "dpop", Params: map[string]string{
 		"source": "realmroot", "reference": binding.Reference,
 	}}
+	sessionCacheKey, err := agent.AgentSessionCacheKey()
+	if err != nil {
+		return err
+	}
+	authReference := "realmroot-session-" + sessionCacheKey
+	if config.AuthProfiles == nil {
+		config.AuthProfiles = map[string]*restish.AuthConfig{}
+	}
+	config.AuthProfiles[authReference] = auth
 	profile.Auth = nil
 	if profile.Credentials == nil {
 		profile.Credentials = map[string]*restishconfig.CredentialConfig{}
@@ -298,7 +307,7 @@ func bindProfileCredentials(
 					continue
 				}
 				profile.Credentials[requirement.ID] = &restishconfig.CredentialConfig{
-					Auth: auth, Satisfies: append([]string(nil), binding.Scopes...),
+					AuthRef: authReference, Satisfies: append([]string(nil), binding.Scopes...),
 				}
 			}
 		}

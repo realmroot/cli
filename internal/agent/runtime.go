@@ -13,10 +13,13 @@ const (
 	defaultAgentRuntimeDisplayName = "Realmroot Toolbox"
 )
 
-var sessionEnvironmentNames = []string{
-	"AGENT_SESSION_ID",
-	"CODEX_THREAD_ID",
-	"HERMES_SESSION_KEY",
+var sessionEnvironmentNames = map[string][]string{
+	"claude":  {"CLAUDE_CODE_SESSION_ID"},
+	"codex":   {"CODEX_THREAD_ID"},
+	"copilot": {"COPILOT_AGENT_SESSION_ID"},
+	"goose":   {"AGENT_SESSION_ID"},
+	"hermes":  {"HERMES_SESSION_ID", "HERMES_SESSION_KEY"},
+	"pi":      {"PI_SESSION_ID"},
 }
 
 type environmentLookup func(string) (string, bool)
@@ -34,30 +37,46 @@ var runtimeDetectors = []runtimeDetector{
 	{name: "qwen", displayName: "Qwen", matches: hasEnvironment("QWEN_CODE")},
 	{name: "cursor", displayName: "Cursor", matches: hasEnvironment("CURSOR_AGENT")},
 	{name: "kiro", displayName: "Kiro", matches: hasEnvironments("AGENT_DISPLAY_OUT", "AGENT_CONTEXT_OUT")},
-	{name: "pi", displayName: "Pi", matches: hasEnvironment("PI_CODING_AGENT")},
-	{name: "codex", displayName: "Codex", matches: hasEnvironment("CODEX_CI")},
-	{name: "copilot", displayName: "Copilot", matches: hasEnvironment("COPILOT_CLI")},
+	{name: "pi", displayName: "Pi", matches: hasAnyEnvironment("PI_CODING_AGENT", "PI_SESSION_ID")},
+	{name: "codex", displayName: "Codex", matches: hasAnyEnvironment("CODEX_CI", "CODEX_THREAD_ID")},
+	{name: "copilot", displayName: "Copilot", matches: hasAnyEnvironment("COPILOT_CLI", "COPILOT_AGENT_SESSION_ID")},
 	{name: "gemini", displayName: "Gemini", matches: hasEnvironment("GEMINI_CLI")},
-	{name: "claude", displayName: "Claude", matches: hasEnvironment("CLAUDECODE")},
-	{name: "hermes", displayName: "Hermes", matches: hasAnyEnvironment("HERMES_INTERACTIVE", "HERMES_SESSION_KEY")},
+	{name: "claude", displayName: "Claude", matches: hasAnyEnvironment("CLAUDECODE", "CLAUDE_CODE_SESSION_ID")},
+	{name: "hermes", displayName: "Hermes", matches: hasAnyEnvironment("HERMES_INTERACTIVE", "HERMES_SESSION_ID", "HERMES_SESSION_KEY")},
 }
 
 func agentRuntime() (string, error) {
 	return detectAgentRuntime(os.LookupEnv)
 }
 
-func agentSession() string {
-	return detectAgentSession(os.LookupEnv)
+func agentSession(runtime string) (string, bool) {
+	return detectAgentSession(runtime, os.LookupEnv)
 }
 
-func detectAgentSession(lookup environmentLookup) string {
-	for _, name := range sessionEnvironmentNames {
+func AgentSessionCacheKey() (string, error) {
+	runtime, err := agentRuntime()
+	if err != nil {
+		return "", err
+	}
+	sessionID, ok := agentSession(runtime)
+	if !ok {
+		return runtime + "-none", nil
+	}
+	digest := sha256.Sum256([]byte(runtime + "\x00" + sessionID))
+	return runtime + "-" + hex.EncodeToString(digest[:16]), nil
+}
+
+func detectAgentSession(runtime string, lookup environmentLookup) (string, bool) {
+	names := sessionEnvironmentNames[runtime]
+	if len(names) == 0 {
+		names = []string{"AGENT_SESSION_ID"}
+	}
+	for _, name := range names {
 		if value, ok := lookup(name); ok && strings.TrimSpace(value) != "" {
-			digest := sha256.Sum256([]byte(name + "\x00" + value))
-			return strings.ToLower(name) + ":" + hex.EncodeToString(digest[:16])
+			return value, true
 		}
 	}
-	return "default"
+	return "", false
 }
 
 func detectAgentRuntime(lookup environmentLookup) (string, error) {

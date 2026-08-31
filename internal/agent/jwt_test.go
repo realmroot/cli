@@ -10,6 +10,7 @@ import (
 )
 
 func TestSignAgentJWTProducesVerifiablePossessionProof(t *testing.T) {
+	t.Setenv("CODEX_THREAD_ID", "thread-raw-123")
 	publicKey, privateKey, keyID, err := newSigningKey("agent")
 	if err != nil {
 		t.Fatal(err)
@@ -21,6 +22,7 @@ func TestSignAgentJWTProducesVerifiablePossessionProof(t *testing.T) {
 		HostID:          "host-123",
 		AgentKeyID:      keyID,
 		AgentPrivateKey: encodePrivateKey(privateKey),
+		Runtime:         "codex",
 	}
 
 	token, err := signAgentJWT(state, "https://auth.example.com/api/auth", now)
@@ -51,6 +53,11 @@ func TestSignAgentJWTProducesVerifiablePossessionProof(t *testing.T) {
 	}
 	if claims["aud"] != "https://auth.example.com/api/auth" {
 		t.Fatalf("unexpected JWT audience: %#v", claims["aud"])
+	}
+	if binding, ok := claims[realmrootAgentBindingClaim].(map[string]any); !ok ||
+		binding["protocol_agent_id"] != "agent-123" || binding["host_id"] != "host-123" ||
+		binding["runtime"] != "codex" || binding["session_id"] != "thread-raw-123" {
+		t.Fatalf("unexpected Agent runtime session binding: %#v", claims[realmrootAgentBindingClaim])
 	}
 	if claims["iat"] != float64(now.Unix()) || claims["exp"] != float64(now.Add(2*time.Minute).Unix()) {
 		t.Fatalf("unexpected JWT lifetime: %#v", claims)

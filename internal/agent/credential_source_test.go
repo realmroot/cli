@@ -155,6 +155,39 @@ func TestInternalProtocolCredentialRetainsPreviouslyIssuedBootstrapScopes(t *tes
 	}
 }
 
+func TestInternalProtocolCredentialRefreshesWhenRuntimeSessionChanges(t *testing.T) {
+	t.Setenv("CODEX_THREAD_ID", "session-new")
+	offer := testCredential(t, "", time.Time{})
+	states := newCredentialState(t, offer)
+	states.state.Runtime = "codex"
+	states.state.ProtocolCredential.RuntimeSessionID = "session-old"
+	tokenRequests := 0
+	client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		tokenRequests++
+		return jsonResponse(http.StatusOK, map[string]any{
+			"access_token": "session-token", "token_type": "DPoP", "expires_in": 300,
+		}), nil
+	})
+	configuration := agentConfiguration{
+		AgentTokenEndpoint:   "https://auth.example.com/api/auth/oauth2/token",
+		AgentBootstrapScopes: []string{"agent:read", "access-requests:read", "access-requests:write"},
+	}
+	reference := credentialSourceStateReference{
+		path: "memory", state: states.state, reference: testCredentialSourceReference,
+		source: states.state.CredentialSources[testCredentialSourceReference],
+	}
+
+	credential, err := ensureInternalProtocolCredential(
+		context.Background(), client, states, reference, configuration, []string{"agent:read"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tokenRequests != 1 || credential.RuntimeSessionID != "session-new" || credential.AccessToken != "session-token" {
+		t.Fatalf("token requests = %d, credential = %#v", tokenRequests, credential)
+	}
+}
+
 func TestCredentialSourceDescribesStoredOfferWithoutCredentialMaterial(t *testing.T) {
 	offer := testCredential(t, "", time.Time{})
 	states := newCredentialState(t, offer)
