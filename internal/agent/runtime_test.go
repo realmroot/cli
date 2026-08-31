@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"strings"
 	"testing"
 )
 
@@ -30,11 +29,11 @@ func TestDetectAgentRuntimeRecognizesAgentTools(t *testing.T) {
 		{environment: map[string]string{"CURSOR_AGENT": ""}, expected: "cursor"},
 		{environment: map[string]string{"AGENT_DISPLAY_OUT": "", "AGENT_CONTEXT_OUT": ""}, expected: "kiro"},
 		{environment: map[string]string{"PI_CODING_AGENT": ""}, expected: "pi"},
-		{environment: map[string]string{"CODEX_CI": ""}, expected: "codex"},
-		{environment: map[string]string{"COPILOT_CLI": ""}, expected: "copilot"},
+		{environment: map[string]string{"CODEX_THREAD_ID": "thread-1"}, expected: "codex"},
+		{environment: map[string]string{"COPILOT_AGENT_SESSION_ID": "session-1"}, expected: "copilot"},
 		{environment: map[string]string{"GEMINI_CLI": ""}, expected: "gemini"},
-		{environment: map[string]string{"CLAUDECODE": ""}, expected: "claude"},
-		{environment: map[string]string{"HERMES_SESSION_KEY": ""}, expected: "hermes"},
+		{environment: map[string]string{"CLAUDE_CODE_SESSION_ID": "session-2"}, expected: "claude"},
+		{environment: map[string]string{"HERMES_SESSION_ID": "session-3"}, expected: "hermes"},
 	} {
 		runtime, err := detectAgentRuntime(testEnvironment(test.environment))
 		if err != nil {
@@ -84,18 +83,26 @@ func TestNormalizeDeviceDisplayNameRejectsMissingDeviceName(t *testing.T) {
 	}
 }
 
-func TestDetectAgentSessionIsolatesConcurrentSessionsWithoutPersistingRawIdentifiers(t *testing.T) {
-	first := detectAgentSession(testEnvironment(map[string]string{"CODEX_THREAD_ID": "thread-secret-1"}))
-	again := detectAgentSession(testEnvironment(map[string]string{"CODEX_THREAD_ID": "thread-secret-1"}))
-	second := detectAgentSession(testEnvironment(map[string]string{"CODEX_THREAD_ID": "thread-secret-2"}))
-	if first != again || first == second {
-		t.Fatalf("session keys are not stable and isolated: %q %q %q", first, again, second)
+func TestDetectAgentSessionReturnsRawRuntimeIdentifier(t *testing.T) {
+	for _, test := range []struct {
+		runtime     string
+		environment map[string]string
+		expected    string
+	}{
+		{runtime: "codex", environment: map[string]string{"CODEX_THREAD_ID": "thread-1"}, expected: "thread-1"},
+		{runtime: "claude", environment: map[string]string{"CLAUDE_CODE_SESSION_ID": "session-2"}, expected: "session-2"},
+		{runtime: "copilot", environment: map[string]string{"COPILOT_AGENT_SESSION_ID": "session-3"}, expected: "session-3"},
+		{runtime: "goose", environment: map[string]string{"AGENT_SESSION_ID": "session-4"}, expected: "session-4"},
+		{runtime: "hermes", environment: map[string]string{"HERMES_SESSION_ID": "session-5"}, expected: "session-5"},
+		{runtime: "pi", environment: map[string]string{"PI_SESSION_ID": "session-6"}, expected: "session-6"},
+	} {
+		sessionID, ok := detectAgentSession(test.runtime, testEnvironment(test.environment))
+		if !ok || sessionID != test.expected {
+			t.Fatalf("runtime %q session = %q, %v", test.runtime, sessionID, ok)
+		}
 	}
-	if strings.Contains(first, "thread-secret") {
-		t.Fatalf("session key contains the raw external identifier: %q", first)
-	}
-	if fallback := detectAgentSession(testEnvironment(nil)); fallback != "default" {
-		t.Fatalf("fallback session = %q", fallback)
+	if sessionID, ok := detectAgentSession("codex", testEnvironment(nil)); ok || sessionID != "" {
+		t.Fatalf("missing session = %q, %v", sessionID, ok)
 	}
 }
 

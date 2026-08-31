@@ -12,6 +12,8 @@ import (
 	"time"
 )
 
+const realmrootAgentBindingClaim = "urn:realmroot:params:agent:binding"
+
 func newSigningKey(prefix string) (ed25519.PublicKey, ed25519.PrivateKey, string, error) {
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -54,11 +56,20 @@ func signAgentJWT(state agentState, issuer string, now time.Time) (string, error
 	if err != nil {
 		return "", err
 	}
-	return signJWT(privateKey, state.AgentKeyID, "agent+jwt", map[string]any{
+	claims := map[string]any{
 		"iss": state.HostID,
 		"sub": state.AgentID,
 		"aud": issuer,
-	}, now)
+	}
+	if sessionID, ok := agentSession(state.Runtime); ok {
+		claims[realmrootAgentBindingClaim] = map[string]string{
+			"protocol_agent_id": state.AgentID,
+			"host_id":           state.HostID,
+			"runtime":           state.Runtime,
+			"session_id":        sessionID,
+		}
+	}
+	return signJWT(privateKey, state.AgentKeyID, "agent+jwt", claims, now)
 }
 
 func signHostJWT(state hostState, issuer string, now time.Time) (string, error) {

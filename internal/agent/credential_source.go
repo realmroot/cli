@@ -306,7 +306,8 @@ func ensureInternalProtocolCredential(
 	}
 	if credential.AccessToken == "" || credential.ExpiresAt == nil ||
 		!time.Now().Add(5*time.Second).Before(*credential.ExpiresAt) ||
-		!scopesContain(credential.Scopes, requiredScopes) {
+		!scopesContain(credential.Scopes, requiredScopes) ||
+		!credentialMatchesAgentSession(reference.state, *credential) {
 		requestedScopes := retainedBootstrapScopes(credential.Scopes, requiredScopes, configuration.AgentBootstrapScopes)
 		updated, err := requestProtocolToken(
 			ctx, client, reference.state, *credential, configuration, requestedScopes,
@@ -452,7 +453,8 @@ func reusableInternalProtocolCredential(state agentState, requiredScopes []strin
 	}
 	credential := *state.ProtocolCredential
 	return credential, credential.AccessToken != "" && credential.ExpiresAt != nil &&
-		time.Now().Add(5*time.Second).Before(*credential.ExpiresAt) && scopesContain(credential.Scopes, requiredScopes)
+		time.Now().Add(5*time.Second).Before(*credential.ExpiresAt) && scopesContain(credential.Scopes, requiredScopes) &&
+		credentialMatchesAgentSession(state, credential)
 }
 
 func realmrootDPoPNonceChallenge(err error) (*dpopNonceChallenge, bool) {

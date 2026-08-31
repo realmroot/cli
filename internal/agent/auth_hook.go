@@ -201,7 +201,8 @@ func usableProtocolCredential(
 		return dpopCredential{}, errors.New("Realmroot Agent protocol OAuth credential is unavailable")
 	}
 	protocol := *state.ProtocolCredential
-	if protocol.AccessToken != "" && protocol.ExpiresAt != nil && time.Now().Add(5*time.Second).Before(*protocol.ExpiresAt) {
+	if protocol.AccessToken != "" && protocol.ExpiresAt != nil && time.Now().Add(5*time.Second).Before(*protocol.ExpiresAt) &&
+		credentialMatchesAgentSession(state, protocol) {
 		return protocol, nil
 	}
 	if len(protocol.Scopes) == 0 {
@@ -429,7 +430,8 @@ func ensureProtocolCredential(
 	}
 	if credential.AccessToken == "" || credential.ExpiresAt == nil ||
 		!time.Now().Add(5*time.Second).Before(*credential.ExpiresAt) ||
-		!scopesContain(credential.Scopes, requiredScopes) {
+		!scopesContain(credential.Scopes, requiredScopes) ||
+		!credentialMatchesAgentSession(state, *credential) {
 		requestedScopes := retainedBootstrapScopes(credential.Scopes, requiredScopes, configuration.AgentBootstrapScopes)
 		updated, err := requestProtocolToken(ctx, client, state, *credential, configuration, requestedScopes)
 		if err != nil {
@@ -492,7 +494,13 @@ func requestProtocolToken(
 	expiresAt := time.Now().Add(time.Duration(response.ExpiresIn) * time.Second)
 	credential.ExpiresAt = &expiresAt
 	credential.Scopes = append([]string(nil), requiredScopes...)
+	credential.RuntimeSessionID, _ = agentSession(state.Runtime)
 	return credential, nil
+}
+
+func credentialMatchesAgentSession(state agentState, credential dpopCredential) bool {
+	sessionID, _ := agentSession(state.Runtime)
+	return credential.RuntimeSessionID == sessionID
 }
 
 func sameOrigin(value string, origin string) bool {

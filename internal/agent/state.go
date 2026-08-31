@@ -55,6 +55,7 @@ type dpopCredential struct {
 	AccessToken          string           `json:"access_token,omitempty"`
 	ExpiresAt            *time.Time       `json:"expires_at,omitempty"`
 	Scopes               []string         `json:"scopes,omitempty"`
+	RuntimeSessionID     string           `json:"runtime_session_id,omitempty"`
 }
 
 type credentialSource struct {
