@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -103,6 +104,23 @@ func TestDetectAgentSessionReturnsRawRuntimeIdentifier(t *testing.T) {
 	}
 	if sessionID, ok := detectAgentSession("codex", testEnvironment(nil)); ok || sessionID != "" {
 		t.Fatalf("missing session = %q, %v", sessionID, ok)
+	}
+}
+
+func TestAgentSessionCacheKeySeparatesRawSessionIdentifiers(t *testing.T) {
+	t.Setenv("AGENT", "codex")
+	t.Setenv("CODEX_THREAD_ID", "thread-secret-1")
+	first, err := AgentSessionCacheKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CODEX_THREAD_ID", "thread-secret-2")
+	second, err := AgentSessionCacheKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first == second || strings.Contains(first, "thread-secret") || strings.Contains(second, "thread-secret") {
+		t.Fatalf("session cache keys = %q, %q", first, second)
 	}
 }
 

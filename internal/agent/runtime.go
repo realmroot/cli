@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"os"
 	"strings"
@@ -49,6 +51,19 @@ func agentRuntime() (string, error) {
 
 func agentSession(runtime string) (string, bool) {
 	return detectAgentSession(runtime, os.LookupEnv)
+}
+
+func AgentSessionCacheKey() (string, error) {
+	runtime, err := agentRuntime()
+	if err != nil {
+		return "", err
+	}
+	sessionID, ok := agentSession(runtime)
+	if !ok {
+		return runtime + "-none", nil
+	}
+	digest := sha256.Sum256([]byte(runtime + "\x00" + sessionID))
+	return runtime + "-" + hex.EncodeToString(digest[:16]), nil
 }
 
 func detectAgentSession(runtime string, lookup environmentLookup) (string, bool) {
