@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -19,6 +20,77 @@ import (
 	"github.com/realmroot/cli/internal/catalog"
 	restish "github.com/saltbo/restish/v2"
 )
+
+func TestPrepareGenericIdempotencyLeavesUnprotectedOperationUnchanged(t *testing.T) {
+	args := []string{"post", "https://api.example.com/tasks", "title:example"}
+
+	prepared, err := prepareGenericIdempotency(restish.OperationInspection{}, args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(prepared, args) {
+		t.Fatalf("prepared args = %#v, want unchanged %#v", prepared, args)
+	}
+}
+
+func TestPrepareGenericIdempotencyInjectsRFC8941Key(t *testing.T) {
+	args := []string{"post", "https://api.example.com/tasks", "title:example"}
+
+	prepared, err := prepareGenericIdempotency(restish.OperationInspection{RequiresIdempotencyKey: true}, args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(prepared[:len(args)], args) {
+		t.Fatalf("prepared prefix = %#v, want original args %#v", prepared[:len(args)], args)
+	}
+	if len(prepared) != len(args)+2 || prepared[len(args)] != "--rsh-header" {
+		t.Fatalf("prepared args = %#v, want generated header only", prepared)
+	}
+	header := strings.TrimPrefix(prepared[len(args)+1], "Idempotency-Key: ")
+	if !regexp.MustCompile(`^"[0-9a-f]{32}"$`).MatchString(header) {
+		t.Fatalf("generated Idempotency-Key = %q, want RFC 8941 quoted 128-bit hex string", header)
+	}
+}
+
+func TestPrepareGenericIdempotencyPreservesExistingHeaderWithoutDuplication(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		args []string
+	}{
+		{name: "separate", args: []string{"post", "https://api.example.com/tasks", "--rsh-header", `iDeMpOtEnCy-KeY: "caller-key"`}},
+		{name: "equals", args: []string{"post", "https://api.example.com/tasks", `--rsh-header=IDEMPOTENCY-KEY: "caller-key"`}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			prepared, err := prepareGenericIdempotency(restish.OperationInspection{RequiresIdempotencyKey: true}, test.args)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Equal(prepared[:len(test.args)], test.args) {
+				t.Fatalf("prepared prefix = %#v, want existing header preserved %#v", prepared[:len(test.args)], test.args)
+			}
+			if !slices.Equal(prepared, test.args) {
+				t.Fatalf("prepared args = %#v, want existing header unchanged %#v", prepared, test.args)
+			}
+		})
+	}
+}
+
+func TestPrepareGenericIdempotencyGeneratesOneKeyPerLogicalCall(t *testing.T) {
+	operation := restish.OperationInspection{RequiresIdempotencyKey: true}
+	args := []string{"post", "https://api.example.com/tasks"}
+
+	first, err := prepareGenericIdempotency(operation, args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := prepareGenericIdempotency(operation, args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first[len(args)+1] == second[len(args)+1] {
+		t.Fatalf("independent logical calls reused Idempotency-Key %q", first[len(args)+1])
+	}
+}
 
 func TestConfigureRestishPathsUsesVersionedCache(t *testing.T) {
 	t.Setenv("RSH_CONFIG_DIR", "")
