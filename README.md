@@ -154,6 +154,13 @@ the deployment URL and selects operation authority without exposing either to
 the caller. Absolute URLs remain available only for unregistered public HTTP
 targets.
 
+When a published operation requires an `Idempotency-Key` header, Toolbox
+generates an RFC 8941 key automatically for both generated and generic
+resource-first commands. One logical invocation reuses that key across
+transient retries. Callers may still pass `--idempotency-key` on generated
+commands or `--header 'Idempotency-Key: "known-key"'` on generic commands when
+recovering a request whose outcome is unknown.
+
 `platform` and `sync` are reserved Toolbox command names. `platform` always maps to the Resource Server whose published
 identifier is `realmroot`. Resource Server names also cannot collide with the
 generic HTTP verbs.

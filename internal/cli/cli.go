@@ -910,6 +910,7 @@ func (a *App) runRestish(ctx context.Context, service *agent.Service, client *ca
 	if err != nil {
 		return err
 	}
+	var genericOperation *restish.OperationInspection
 	if server, ok := selectedResourceServer(servers, args); ok {
 		profile := "default"
 		inspection, inspectErr := runtime.InspectAPI(ctx, server.CommandName, profile)
@@ -949,6 +950,7 @@ func (a *App) runRestish(ctx context.Context, service *agent.Service, client *ca
 		if !operationSelected {
 			return fmt.Errorf("%s %s does not match one published operation for Resource Server %q", strings.ToUpper(args[0]), args[1], server.CommandName)
 		}
+		genericOperation = &operation
 		if operationRequiresAuthority(operation) {
 			details, detailsErr := client.AuthorizationDetails(ctx, server)
 			if detailsErr != nil {
@@ -972,6 +974,12 @@ func (a *App) runRestish(ctx context.Context, service *agent.Service, client *ca
 		}
 	}
 	argvArgs := append([]string(nil), args...)
+	if genericOperation != nil {
+		argvArgs, err = prepareGenericIdempotency(*genericOperation, argvArgs)
+		if err != nil {
+			return err
+		}
+	}
 	if !hasRuntimeFlag(argvArgs, "--rsh-print") {
 		argvArgs = append(argvArgs, "--rsh-print", "b")
 	}
@@ -979,10 +987,48 @@ func (a *App) runRestish(ctx context.Context, service *agent.Service, client *ca
 		argvArgs = append(argvArgs, "--rsh-output-format", "json")
 	}
 	argv := append([]string{"realmroot toolbox"}, argvArgs...)
-	if err := runtime.Run(argv); err != nil {
+	runOptions := restish.RunOptions{}
+	if genericOperation != nil {
+		runOptions.IdempotencyProtected = genericOperation.RequiresIdempotencyKey
+	}
+	if err := runtime.RunWithOptions(argv, runOptions); err != nil {
 		return toolboxRuntimeError{cause: err}
 	}
 	return nil
+}
+
+func prepareGenericIdempotency(operation restish.OperationInspection, args []string) ([]string, error) {
+	prepared := append([]string(nil), args...)
+	if !operation.RequiresIdempotencyKey {
+		return prepared, nil
+	}
+	if !hasHeader(prepared, "Idempotency-Key") {
+		key, err := restish.NewIdempotencyKey()
+		if err != nil {
+			return nil, err
+		}
+		prepared = append(prepared, "--rsh-header", "Idempotency-Key: "+key)
+	}
+	return prepared, nil
+}
+
+func hasHeader(args []string, name string) bool {
+	for index, argument := range args {
+		var header string
+		switch {
+		case argument == "--rsh-header" && index+1 < len(args):
+			header = args[index+1]
+		case strings.HasPrefix(argument, "--rsh-header="):
+			header = strings.TrimPrefix(argument, "--rsh-header=")
+		default:
+			continue
+		}
+		headerName, _, found := strings.Cut(header, ":")
+		if found && strings.EqualFold(strings.TrimSpace(headerName), name) {
+			return true
+		}
+	}
+	return false
 }
 
 func hasRuntimeFlag(args []string, name string) bool {
@@ -1015,7 +1061,8 @@ func (a *App) newRestishRuntime(service *agent.Service, config *restish.Config) 
 	return a.newRestishRuntimeWithCommandSurface(service, config, restish.CommandSurface{
 		HTTPMethods: []string{"get", "head", "post", "put", "patch", "delete"}, RegisteredAPIs: true, HideSupportCommands: true,
 		MetadataRefreshTimeout: 30 * time.Second, IgnoreUserConfig: true, DisablePlugins: true, HideInternalFlags: true,
-		CompactOperationHelp: true,
+		CompactOperationHelp:     true,
+		AutomaticIdempotencyKeys: true,
 	})
 }
 
