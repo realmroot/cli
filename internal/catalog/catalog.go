@@ -91,10 +91,10 @@ func New(service *agent.Service, httpClient realmrootapi.HttpRequestDoer) (*Clie
 }
 
 func (c *Client) List(ctx context.Context) ([]ResourceServer, error) {
-	limit, offset := 100, 0
+	page, pageSize := 1, 100
 	result := make([]ResourceServer, 0)
 	for {
-		response, err := c.api.ListResourceServersWithResponse(ctx, &realmrootapi.ListResourceServersParams{Limit: &limit, Offset: &offset}, c.editor("resource-servers:read"))
+		response, err := c.api.ListResourceServersWithResponse(ctx, &realmrootapi.ListResourceServersParams{Page: &page, PageSize: &pageSize}, c.editor("resource-servers:read"))
 		if err != nil {
 			return nil, fmt.Errorf("list Resource Servers: %w", err)
 		}
@@ -132,10 +132,10 @@ func (c *Client) List(ctx context.Context) ([]ResourceServer, error) {
 				result = append(result, server)
 			}
 		}
-		if !response.JSON200.Pagination.HasMore {
+		if response.JSON200.Pagination.Page >= response.JSON200.Pagination.TotalPages {
 			break
 		}
-		offset = response.JSON200.Pagination.NextOffset
+		page = response.JSON200.Pagination.Page + 1
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].CommandName < result[j].CommandName })
 	return result, nil
@@ -165,11 +165,11 @@ func (c *Client) Find(ctx context.Context, commandName string) (ResourceServer, 
 }
 
 func (c *Client) AuthorizationDetails(ctx context.Context, server ResourceServer) ([]AuthorizationDetail, error) {
-	limit, offset := 100, 0
+	page, pageSize := 1, 100
 	result := make([]AuthorizationDetail, 0)
 	for {
 		response, err := c.api.ListResourceServerAuthorizationDetailsWithResponse(ctx, server.ID,
-			&realmrootapi.ListResourceServerAuthorizationDetailsParams{Limit: &limit, Offset: &offset}, c.editor("authorization-details:read"))
+			&realmrootapi.ListResourceServerAuthorizationDetailsParams{Page: &page, PageSize: &pageSize}, c.editor("authorization-details:read"))
 		if err != nil {
 			return nil, fmt.Errorf("list Resource Server authorization details: %w", err)
 		}
@@ -190,10 +190,10 @@ func (c *Client) AuthorizationDetails(ctx context.Context, server ResourceServer
 				RequestableScopes:          append([]string(nil), item.RequestableScopes...), Metadata: item.Metadata,
 			})
 		}
-		if !response.JSON200.Pagination.HasMore {
+		if response.JSON200.Pagination.Page >= response.JSON200.Pagination.TotalPages {
 			break
 		}
-		offset = response.JSON200.Pagination.NextOffset
+		page = response.JSON200.Pagination.Page + 1
 	}
 	return result, nil
 }
