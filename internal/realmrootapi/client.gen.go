@@ -2236,8 +2236,8 @@ type GetAgentEnrollment404JSONResponseBodyErrorCode string
 
 // ListResourceServersParams defines parameters for ListResourceServers.
 type ListResourceServersParams struct {
-	Limit               *int    `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset              *int    `form:"offset,omitempty" json:"offset,omitempty"`
+	Page                *int    `form:"page,omitempty" json:"page,omitempty"`
+	PageSize            *int    `form:"pageSize,omitempty" json:"pageSize,omitempty"`
 	OwnerOrganizationId *string `form:"ownerOrganizationId,omitempty" json:"ownerOrganizationId,omitempty"`
 }
 
@@ -2315,8 +2315,8 @@ type GetResourceServer403JSONResponseBodyErrorCode string
 
 // ListResourceServerAuthorizationDetailsParams defines parameters for ListResourceServerAuthorizationDetails.
 type ListResourceServerAuthorizationDetailsParams struct {
-	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+	Page     *int `form:"page,omitempty" json:"page,omitempty"`
+	PageSize *int `form:"pageSize,omitempty" json:"pageSize,omitempty"`
 }
 
 // ListResourceServerAuthorizationDetails200JSONResponseBodyItemsAccountAuthorizationStatus defines parameters for ListResourceServerAuthorizationDetails.
@@ -3887,9 +3887,9 @@ func NewListResourceServersRequest(server string, params *ListResourceServersPar
 		// per the OpenAPI spec (e.g. "color=blue,black,brown").
 		var rawQueryFragments []string
 
-		if params.Limit != nil {
+		if params.Page != nil {
 
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "page", *params.Page, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -3899,9 +3899,9 @@ func NewListResourceServersRequest(server string, params *ListResourceServersPar
 
 		}
 
-		if params.Offset != nil {
+		if params.PageSize != nil {
 
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "offset", *params.Offset, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "pageSize", *params.PageSize, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -4006,9 +4006,9 @@ func NewListResourceServerAuthorizationDetailsRequest(server string, resourceSer
 		// per the OpenAPI spec (e.g. "color=blue,black,brown").
 		var rawQueryFragments []string
 
-		if params.Limit != nil {
+		if params.Page != nil {
 
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "page", *params.Page, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -4018,9 +4018,9 @@ func NewListResourceServerAuthorizationDetailsRequest(server string, resourceSer
 
 		}
 
-		if params.Offset != nil {
+		if params.PageSize != nil {
 
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "offset", *params.Offset, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "pageSize", *params.PageSize, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -4128,14 +4128,18 @@ type GetAgentStatusResponse struct {
 		Agent struct {
 			CreatedAt time.Time                                         `json:"createdAt"`
 			HomeSpace GetAgentStatus200JSONResponseBody_Agent_HomeSpace `json:"homeSpace"`
-			Id        string                                            `json:"id"`
-			Issuer    string                                            `json:"issuer"`
-			Name      string                                            `json:"name"`
-			Runtime   string                                            `json:"runtime"`
-			Status    GetAgentStatus200JSONResponseBodyAgentStatus      `json:"status"`
-			Subject   string                                            `json:"subject"`
-			UpdatedAt time.Time                                         `json:"updatedAt"`
-			Username  string                                            `json:"username"`
+
+			// Id Stable Agent resource identifier. New values are UUIDv7; legacy prefixed values remain readable.
+			Id      string                                       `json:"id"`
+			Issuer  string                                       `json:"issuer"`
+			Name    string                                       `json:"name"`
+			Runtime string                                       `json:"runtime"`
+			Status  GetAgentStatus200JSONResponseBodyAgentStatus `json:"status"`
+
+			// Subject Stable OIDC subject. New Agent subjects are UUIDv7; historical values remain readable references.
+			Subject   string    `json:"subject"`
+			UpdatedAt time.Time `json:"updatedAt"`
+			Username  string    `json:"username"`
 		} `json:"agent"`
 		Enrollment struct {
 			Pending string                                           `json:"pending"`
@@ -4608,11 +4612,10 @@ type ListResourceServersResponse struct {
 			Visibility ListResourceServers200JSONResponseBodyItemsVisibility `json:"visibility"`
 		} `json:"items"`
 		Pagination struct {
-			HasMore    bool `json:"hasMore"`
-			Limit      int  `json:"limit"`
-			NextOffset int  `json:"nextOffset"`
-			Offset     int  `json:"offset"`
-			Total      int  `json:"total"`
+			Page       int `json:"page"`
+			PageSize   int `json:"pageSize"`
+			TotalItems int `json:"totalItems"`
+			TotalPages int `json:"totalPages"`
 		} `json:"pagination"`
 	}
 	JSON401 *struct {
@@ -4787,11 +4790,10 @@ type ListResourceServerAuthorizationDetailsResponse struct {
 			RequestableScopes          []string                                                                                 `json:"requestableScopes"`
 		} `json:"items"`
 		Pagination struct {
-			HasMore    bool `json:"hasMore"`
-			Limit      int  `json:"limit"`
-			NextOffset int  `json:"nextOffset"`
-			Offset     int  `json:"offset"`
-			Total      int  `json:"total"`
+			Page       int `json:"page"`
+			PageSize   int `json:"pageSize"`
+			TotalItems int `json:"totalItems"`
+			TotalPages int `json:"totalPages"`
 		} `json:"pagination"`
 	}
 	JSON401 *struct {
@@ -4960,14 +4962,18 @@ func ParseGetAgentStatusResponse(rsp *http.Response) (*GetAgentStatusResponse, e
 			Agent struct {
 				CreatedAt time.Time                                         `json:"createdAt"`
 				HomeSpace GetAgentStatus200JSONResponseBody_Agent_HomeSpace `json:"homeSpace"`
-				Id        string                                            `json:"id"`
-				Issuer    string                                            `json:"issuer"`
-				Name      string                                            `json:"name"`
-				Runtime   string                                            `json:"runtime"`
-				Status    GetAgentStatus200JSONResponseBodyAgentStatus      `json:"status"`
-				Subject   string                                            `json:"subject"`
-				UpdatedAt time.Time                                         `json:"updatedAt"`
-				Username  string                                            `json:"username"`
+
+				// Id Stable Agent resource identifier. New values are UUIDv7; legacy prefixed values remain readable.
+				Id      string                                       `json:"id"`
+				Issuer  string                                       `json:"issuer"`
+				Name    string                                       `json:"name"`
+				Runtime string                                       `json:"runtime"`
+				Status  GetAgentStatus200JSONResponseBodyAgentStatus `json:"status"`
+
+				// Subject Stable OIDC subject. New Agent subjects are UUIDv7; historical values remain readable references.
+				Subject   string    `json:"subject"`
+				UpdatedAt time.Time `json:"updatedAt"`
+				Username  string    `json:"username"`
 			} `json:"agent"`
 			Enrollment struct {
 				Pending string                                           `json:"pending"`
@@ -5512,11 +5518,10 @@ func ParseListResourceServersResponse(rsp *http.Response) (*ListResourceServersR
 				Visibility ListResourceServers200JSONResponseBodyItemsVisibility `json:"visibility"`
 			} `json:"items"`
 			Pagination struct {
-				HasMore    bool `json:"hasMore"`
-				Limit      int  `json:"limit"`
-				NextOffset int  `json:"nextOffset"`
-				Offset     int  `json:"offset"`
-				Total      int  `json:"total"`
+				Page       int `json:"page"`
+				PageSize   int `json:"pageSize"`
+				TotalItems int `json:"totalItems"`
+				TotalPages int `json:"totalPages"`
 			} `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -5707,11 +5712,10 @@ func ParseListResourceServerAuthorizationDetailsResponse(rsp *http.Response) (*L
 				RequestableScopes          []string                                                                                 `json:"requestableScopes"`
 			} `json:"items"`
 			Pagination struct {
-				HasMore    bool `json:"hasMore"`
-				Limit      int  `json:"limit"`
-				NextOffset int  `json:"nextOffset"`
-				Offset     int  `json:"offset"`
-				Total      int  `json:"total"`
+				Page       int `json:"page"`
+				PageSize   int `json:"pageSize"`
+				TotalItems int `json:"totalItems"`
+				TotalPages int `json:"totalPages"`
 			} `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
