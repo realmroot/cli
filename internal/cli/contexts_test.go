@@ -59,7 +59,7 @@ func TestResolveContextUsesResourceTemplatesBeforeTheAccountIsConnected(t *testi
 	}
 }
 
-func TestResolveContextGuidesAMissingNamedContextToConnections(t *testing.T) {
+func TestResolveContextGuidesAMissingContextIDToConnections(t *testing.T) {
 	// [spec: cli/missing-context-guidance]
 	t.Setenv("REALMROOT_STATE_DIR", t.TempDir())
 	service, err := agent.NewService("https://id.example.com", http.DefaultClient)
@@ -70,43 +70,41 @@ func TestResolveContextGuidesAMissingNamedContextToConnections(t *testing.T) {
 		CommandName: "github", ResourceURL: "https://api.example.com", ConnectionStatus: "connected",
 	}
 	existing := []catalog.AuthorizationDetail{{
-		Name: "existing-org", AuthorizationDetail: map[string]any{"type": "installation", "installation_id": "701"},
+		ID: "ctx_existing", Name: "existing-org", AuthorizationDetail: map[string]any{"type": "installation", "installation_id": "701"},
 	}}
 
-	selected, err := (&App{}).resolveContext(service, server, existing, "new-org")
+	selected, err := (&App{}).resolveContext(service, server, existing, "ctx_missing")
 	if selected != nil || err == nil {
 		t.Fatalf("selected=%#v err=%v", selected, err)
 	}
-	want := `Context "new-org" is not available; connect or update it in Realmroot Connections: https://id.example.com/connections`
+	want := `Context ID "ctx_missing" is not available; connect or update it in Realmroot Connections: https://id.example.com/connections`
 	if err.Error() != want {
 		t.Fatalf("error = %q, want %q", err, want)
 	}
 }
 
-func TestNamedContextUsesAUniqueCaseInsensitiveProviderName(t *testing.T) {
-	detail := catalog.AuthorizationDetail{
-		Name:                "wakatoken",
-		AuthorizationDetail: map[string]any{"type": "installation", "installation_id": "702"},
+func TestContextByIDSelectsStableIDDespiteDuplicateNames(t *testing.T) {
+	// [spec: cli/resource-server-context]
+	details := []catalog.AuthorizationDetail{
+		{ID: "ctx_first", Name: "wakatoken", AuthorizationDetail: map[string]any{"installation_id": "701"}},
+		{ID: "ctx_second", Name: "wakatoken", AuthorizationDetail: map[string]any{"installation_id": "702"}},
 	}
-	selected, err := namedContext([]catalog.AuthorizationDetail{detail}, "WakaToken")
-	if err != nil {
-		t.Fatal(err)
+	selected, err := contextBySelector(details, "ctx_second")
+	if err != nil || selected.AuthorizationDetail["installation_id"] != "702" {
+		t.Fatalf("selected=%#v err=%v", selected, err)
 	}
-	if !sameDetails(detail.AuthorizationDetail, []map[string]any{selected.AuthorizationDetail}) {
-		t.Fatalf("selected Context = %#v", selected)
+	if _, err := contextBySelector(details, "wakatoken"); err == nil || err.Error() != `Context ID "wakatoken" is not available` {
+		t.Fatalf("name selection error = %v", err)
 	}
 }
 
-func TestNamedContextPrefersExactCaseAndRejectsFoldedAmbiguity(t *testing.T) {
-	details := []catalog.AuthorizationDetail{
-		{Name: "wakatoken", AuthorizationDetail: map[string]any{"installation_id": "701"}},
-		{Name: "WakaToken", AuthorizationDetail: map[string]any{"installation_id": "702"}},
+func TestContextSelectorKeepsTemporaryNameCompatibilityOnlyWithoutIDs(t *testing.T) {
+	detail := catalog.AuthorizationDetail{
+		Name:                "legacy-workspace",
+		AuthorizationDetail: map[string]any{"type": "workspace", "id": "workspace-1"},
 	}
-	selected, err := namedContext(details, "WakaToken")
-	if err != nil || selected.AuthorizationDetail["installation_id"] != "702" {
-		t.Fatalf("exact selected=%#v err=%v", selected, err)
-	}
-	if _, err := namedContext(details, "WAKATOKEN"); err == nil || err.Error() != `Context name "WAKATOKEN" is ambiguous` {
-		t.Fatalf("folded ambiguity error = %v", err)
+	selected, err := contextBySelector([]catalog.AuthorizationDetail{detail}, "LEGACY-WORKSPACE")
+	if err != nil || !sameDetails(detail.AuthorizationDetail, []map[string]any{selected.AuthorizationDetail}) {
+		t.Fatalf("selected=%#v err=%v", selected, err)
 	}
 }

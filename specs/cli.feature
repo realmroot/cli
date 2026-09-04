@@ -80,11 +80,12 @@ Feature: Realmroot Toolbox command line
   Scenario: Inspect and select one Resource Server Context
     Given the Resource Server exposes one or more Contexts with service-defined names and attributes
     When the Agent runs "realmroot toolbox github context"
-    Then Toolbox lists only the Context name, authorization status, and current selection
+    Then Toolbox lists each stable Context ID, display name, authorization status, and current selection
     And Context details show the Resource Server supplied description and attributes
-    When the Agent runs "realmroot toolbox github context use realmroot"
+    When the Agent selects the Context by its stable ID
     Then subsequent GitHub operations use that Context by default
     And "--context" can override it for one operation without changing the default
+    And an external Context without a published ID temporarily remains selectable by its unique display name
     But authorization details and credential references are never exposed
 
   @journey:resource-server-sync @entrypoint:toolbox-sync
@@ -114,9 +115,9 @@ Feature: Realmroot Toolbox command line
     And the same URL continues through account connection, Context selection, and Permission approval
 
   @journey:missing-context-guidance @entrypoint:agent-request
-  Scenario: A named Context must already exist
-    Given the requested Context name is not published by the Resource Server
-    When the Agent requests Resource access with that Context name
+  Scenario: A Context ID must already exist
+    Given the requested Context ID is not published by the Resource Server
+    When the Agent requests Resource access with that Context ID
     Then Toolbox does not create an access request
     And directs the controller to Realmroot Connections to connect or update it manually
 

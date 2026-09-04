@@ -189,7 +189,7 @@ func (a *App) execCommand() *cobra.Command {
 			return err
 		},
 	}
-	command.Flags().String("context", "", "Resource Server Context name for this command")
+	command.Flags().String("context", "", "Resource Server Context ID for this command")
 	return command
 }
 
@@ -275,7 +275,7 @@ func (a *App) agentCommand() *cobra.Command {
 func (a *App) requestCommand() *cobra.Command {
 	var resourceServer string
 	var scopes []string
-	var contextName string
+	var contextID string
 	var reason string
 	var handoff bool
 	command := &cobra.Command{
@@ -300,7 +300,7 @@ func (a *App) requestCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			details, err := a.resolveContext(agentService, server, contexts, contextName)
+			details, err := a.resolveContext(agentService, server, contexts, contextID)
 			if err != nil {
 				return err
 			}
@@ -317,7 +317,7 @@ func (a *App) requestCommand() *cobra.Command {
 	}
 	command.Flags().StringVar(&resourceServer, "resource-server", "", "Toolbox Resource Server name, such as github or platform")
 	command.Flags().StringArrayVar(&scopes, "scope", nil, "exact published scope to request (repeatable)")
-	command.Flags().StringVar(&contextName, "context", "", "Resource Server Context name for this request")
+	command.Flags().StringVar(&contextID, "context", "", "Resource Server Context ID for this request")
 	command.Flags().StringVar(&reason, "reason", "", "controller-facing reason for the request")
 	command.Flags().BoolVar(&handoff, "handoff", false, "hand the approval URL to a remote controller without opening a browser or waiting")
 	return command
@@ -381,7 +381,7 @@ func (a *App) toolboxCommand() *cobra.Command {
 	command.Flags().Bool("include", false, "include response headers")
 	command.Flags().String("search", "", "find operations by command, summary, method, path, or operation ID")
 	command.Flags().String("scope", "", "filter a Resource Server overview by published scope")
-	command.Flags().String("context", "", "Resource Server Context name for this operation")
+	command.Flags().String("context", "", "Resource Server Context ID for this operation")
 	command.Flags().Bool("all", false, "show the complete Resource Server inventory")
 	command.Flags().Bool("no-browser", false, "do not open controller approval pages")
 	command.Flags().Bool("no-paginate", false, "return only the first page")
@@ -643,7 +643,7 @@ func (a *App) showResourceServer(ctx context.Context, service *agent.Service, cl
 	}
 	for index := range overview.Contexts {
 		for _, detail := range details {
-			if detail.Name == overview.Contexts[index].Name && sameDetails(detail.AuthorizationDetail, selected) {
+			if detail.ID == overview.Contexts[index].ID && sameDetails(detail.AuthorizationDetail, selected) {
 				overview.Contexts[index].Current = true
 			}
 		}
@@ -651,7 +651,7 @@ func (a *App) showResourceServer(ctx context.Context, service *agent.Service, cl
 	effectiveSelected := selected
 	var effectiveDetail *catalog.AuthorizationDetail
 	if a.context != "" {
-		detail, detailErr := namedContext(details, a.context)
+		detail, detailErr := contextBySelector(details, a.context)
 		if detailErr != nil {
 			return detailErr
 		}
@@ -886,7 +886,11 @@ func (a *App) printContextSummary(overview resourceServerOverview) {
 		if item.Current {
 			current = " (current)"
 		}
-		fmt.Fprintf(a.stdout, "  %s%s — %s\n", item.Name, current, item.AccountAuthorizationStatus)
+		if item.ID == "" {
+			fmt.Fprintf(a.stdout, "  %s%s — %s\n", item.Name, current, item.AccountAuthorizationStatus)
+			continue
+		}
+		fmt.Fprintf(a.stdout, "  %s  %s%s — %s\n", item.ID, item.Name, current, item.AccountAuthorizationStatus)
 	}
 	if overview.ContextTruncated {
 		fmt.Fprintf(a.stdout, "  Showing %d of %d Contexts. Run `realmroot toolbox %s context` to show every Context.\n", len(overview.Contexts), overview.ContextCount, overview.ResourceServer.CommandName)

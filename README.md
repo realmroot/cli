@@ -78,9 +78,9 @@ realmroot toolbox
 realmroot toolbox github
 realmroot toolbox sync github
 realmroot toolbox github context
-realmroot toolbox github context show realmroot
-realmroot toolbox github context use realmroot
-realmroot agent request --resource-server github --context realmroot --scope contents:read
+realmroot toolbox github context show <context-id>
+realmroot toolbox github context use <context-id>
+realmroot agent request --resource-server github --context <context-id> --scope contents:read
 realmroot toolbox cloudflare --search "list zones"
 realmroot toolbox cloudflare --scope zone.read
 realmroot toolbox cloudflare --all
@@ -93,7 +93,7 @@ realmroot exec
 realmroot exec github
 realmroot exec github -- git fetch origin
 realmroot exec github -- gh pr list --repo realmroot/realmroot
-realmroot exec github --context realmroot -- gh pr merge 42 --repo realmroot/realmroot
+realmroot exec github --context <context-id> -- gh pr merge 42 --repo realmroot/realmroot
 realmroot exec cloudflare -- wrangler deployments list --name realmroot-adapters
 ```
 
@@ -143,7 +143,7 @@ Resource authority or change the selected Context.
 
 Generated operations automatically choose the least-privileged approved offer
 inside the selected Context. `agent request`, generated operations, and `exec`
-accept `--context <name>` as a one-command override without changing the
+accept `--context <context-id>` as a one-command override without changing the
 default. `exec` uses all already-approved authority in that Context so opaque
 native protocols such as GraphQL work without exposing scope-selection or
 credential-selection internals. It never requests or expands authority.

@@ -15,6 +15,7 @@ import (
 )
 
 type contextSummary struct {
+	ID                         string            `json:"id,omitempty"`
 	Name                       string            `json:"name"`
 	Description                string            `json:"description,omitempty"`
 	Metadata                   map[string]string `json:"metadata,omitempty"`
@@ -25,6 +26,7 @@ type contextSummary struct {
 }
 
 type contextListItem struct {
+	ID                         string `json:"id,omitempty"`
 	Name                       string `json:"name"`
 	AccountAuthorizationStatus string `json:"accountAuthorizationStatus"`
 	Current                    bool   `json:"current"`
@@ -37,21 +39,22 @@ type contextResult struct {
 
 type contextSelectionResult struct {
 	ResourceServer string `json:"resourceServer"`
-	Context        string `json:"context,omitempty"`
+	ContextID      string `json:"contextId,omitempty"`
+	Name           string `json:"name,omitempty"`
 	Current        bool   `json:"current"`
 }
 
-type contextUnavailableError struct{ name string }
+type contextUnavailableError struct{ id string }
 
 func (e contextUnavailableError) Error() string {
-	return fmt.Sprintf("Context %q is not available", e.name)
+	return fmt.Sprintf("Context ID %q is not available", e.id)
 }
 
 func listContexts(details []catalog.AuthorizationDetail, selected []map[string]any) []contextListItem {
 	result := make([]contextListItem, 0, len(details))
 	for _, detail := range details {
 		result = append(result, contextListItem{
-			Name: detail.Name, AccountAuthorizationStatus: detail.AccountAuthorizationStatus,
+			ID: detail.ID, Name: detail.Name, AccountAuthorizationStatus: detail.AccountAuthorizationStatus,
 			Current: sameDetails(detail.AuthorizationDetail, selected),
 		})
 	}
@@ -62,7 +65,7 @@ func summarizeContexts(details []catalog.AuthorizationDetail, selected []map[str
 	result := make([]contextSummary, 0, len(details))
 	for _, detail := range details {
 		result = append(result, contextSummary{
-			Name: detail.Name, Description: detail.Description, Metadata: detail.Metadata,
+			ID: detail.ID, Name: detail.Name, Description: detail.Description, Metadata: detail.Metadata,
 			AccountAuthorizationStatus: detail.AccountAuthorizationStatus,
 			AuthorizedScopes:           append([]string(nil), detail.AuthorizedScopes...),
 			RequestableScopes:          append([]string(nil), detail.RequestableScopes...),
@@ -100,9 +103,9 @@ func (a *App) contextCommand(ctx context.Context, service *agent.Service, client
 		return a.printContexts(contextResult{ResourceServer: server.CommandName, Contexts: listContexts(details, selected)})
 	}
 	if len(args) != 2 || (args[0] != "show" && args[0] != "use") {
-		return fmt.Errorf("usage: realmroot toolbox %s context [show|use] <name> | clear", server.CommandName)
+		return fmt.Errorf("usage: realmroot toolbox %s context [show|use] <context-id> | clear", server.CommandName)
 	}
-	detail, err := namedContext(details, args[1])
+	detail, err := contextBySelector(details, args[1])
 	if err != nil {
 		return err
 	}
@@ -110,11 +113,11 @@ func (a *App) contextCommand(ctx context.Context, service *agent.Service, client
 		if err := service.StoreContext(server.ResourceURL, []map[string]any{detail.AuthorizationDetail}); err != nil {
 			return err
 		}
-		result := contextSelectionResult{ResourceServer: server.CommandName, Context: detail.Name, Current: true}
+		result := contextSelectionResult{ResourceServer: server.CommandName, ContextID: detail.ID, Name: detail.Name, Current: true}
 		if a.json {
 			return a.printJSON(result)
 		}
-		fmt.Fprintf(a.stdout, "Current Context for %s: %s\n", result.ResourceServer, result.Context)
+		fmt.Fprintf(a.stdout, "Current Context for %s: %s (%s)\n", result.ResourceServer, result.Name, result.ContextID)
 		return nil
 	}
 	summary := summarizeContexts([]catalog.AuthorizationDetail{detail}, selected)[0]
@@ -124,9 +127,9 @@ func (a *App) contextCommand(ctx context.Context, service *agent.Service, client
 	return a.printContext(server.CommandName, summary)
 }
 
-func (a *App) resolveContext(service *agent.Service, server catalog.ResourceServer, details []catalog.AuthorizationDetail, name string) ([]map[string]any, error) {
-	if name != "" {
-		detail, err := namedContext(details, name)
+func (a *App) resolveContext(service *agent.Service, server catalog.ResourceServer, details []catalog.AuthorizationDetail, contextID string) ([]map[string]any, error) {
+	if contextID != "" {
+		detail, err := contextBySelector(details, contextID)
 		if err != nil {
 			var unavailable contextUnavailableError
 			if errors.As(err, &unavailable) {
@@ -160,7 +163,7 @@ func (a *App) resolveContext(service *agent.Service, server catalog.ResourceServ
 	case 1:
 		return []map[string]any{details[0].AuthorizationDetail}, nil
 	default:
-		return nil, fmt.Errorf("Resource Server %q has multiple Contexts; select one with `realmroot toolbox %s context use <name>` or pass --context <name>", server.CommandName, server.CommandName)
+		return nil, fmt.Errorf("Resource Server %q has multiple Contexts; select one with `realmroot toolbox %s context use <context-id>` or pass --context <context-id>", server.CommandName, server.CommandName)
 	}
 }
 
@@ -171,32 +174,25 @@ func disconnectedAuthorizationDetails(server catalog.ResourceServer) []map[strin
 	return server.AuthorizationDetails
 }
 
-func namedContext(details []catalog.AuthorizationDetail, name string) (catalog.AuthorizationDetail, error) {
-	var exactMatches []catalog.AuthorizationDetail
+func contextBySelector(details []catalog.AuthorizationDetail, selector string) (catalog.AuthorizationDetail, error) {
 	for _, detail := range details {
-		if detail.Name == name {
-			exactMatches = append(exactMatches, detail)
+		if detail.ID != "" && detail.ID == selector {
+			return detail, nil
 		}
 	}
-	if len(exactMatches) == 1 {
-		return exactMatches[0], nil
-	}
-	if len(exactMatches) > 1 {
-		return catalog.AuthorizationDetail{}, fmt.Errorf("Context name %q is ambiguous", name)
-	}
-	var matches []catalog.AuthorizationDetail
+	var legacyMatches []catalog.AuthorizationDetail
 	for _, detail := range details {
-		if strings.EqualFold(detail.Name, name) {
-			matches = append(matches, detail)
+		if detail.ID == "" && strings.EqualFold(detail.Name, selector) {
+			legacyMatches = append(legacyMatches, detail)
 		}
 	}
-	if len(matches) == 0 {
-		return catalog.AuthorizationDetail{}, contextUnavailableError{name: name}
+	if len(legacyMatches) == 1 {
+		return legacyMatches[0], nil
 	}
-	if len(matches) > 1 {
-		return catalog.AuthorizationDetail{}, fmt.Errorf("Context name %q is ambiguous", name)
+	if len(legacyMatches) > 1 {
+		return catalog.AuthorizationDetail{}, fmt.Errorf("legacy Context name %q is ambiguous", selector)
 	}
-	return matches[0], nil
+	return catalog.AuthorizationDetail{}, contextUnavailableError{id: selector}
 }
 
 func sameDetails(detail map[string]any, selected []map[string]any) bool {
@@ -217,19 +213,27 @@ func (a *App) printContexts(result contextResult) error {
 		return nil
 	}
 	w := tabwriter.NewWriter(a.stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "CURRENT\tNAME\tACCOUNT")
+	fmt.Fprintln(w, "CURRENT\tID\tNAME\tACCOUNT")
 	for _, item := range result.Contexts {
 		current := ""
 		if item.Current {
 			current = "*"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\n", current, item.Name, item.AccountAuthorizationStatus)
+		id := item.ID
+		if id == "" {
+			id = "-"
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", current, id, item.Name, item.AccountAuthorizationStatus)
 	}
 	return w.Flush()
 }
 
 func (a *App) printContext(resourceServer string, item contextSummary) error {
-	fmt.Fprintf(a.stdout, "Context: %s\nResource Server: %s\nAccount: %s\n", item.Name, resourceServer, item.AccountAuthorizationStatus)
+	fmt.Fprintf(a.stdout, "Context: %s\n", item.Name)
+	if item.ID != "" {
+		fmt.Fprintf(a.stdout, "Context ID: %s\n", item.ID)
+	}
+	fmt.Fprintf(a.stdout, "Resource Server: %s\nAccount: %s\n", resourceServer, item.AccountAuthorizationStatus)
 	if item.Description != "" {
 		fmt.Fprintf(a.stdout, "Description: %s\n", item.Description)
 	}

@@ -232,8 +232,8 @@ func TestToolboxHelpDocumentsLocalCommandSurface(t *testing.T) {
 		"sync <resource-server>",
 		"get|head|post|put|patch|delete <resource-server>/<path>",
 		"<resource-server> context",
-		"<resource-server> context show <name>",
-		"<resource-server> context [use <name>|clear]",
+		"<resource-server> context show <context-id>",
+		"<resource-server> context [use <context-id>|clear]",
 	} {
 		if !strings.Contains(output, expected) {
 			t.Fatalf("help omitted %q:\n%s", expected, output)
@@ -313,7 +313,7 @@ func TestParseExecFlagsConsumesLogLevelBeforeNativeSeparator(t *testing.T) {
 func TestResourceServerContextUsesDisplayContractWithoutRawDetails(t *testing.T) {
 	// [spec: cli/resource-server-context]
 	details := []catalog.AuthorizationDetail{{
-		Name: "realmroot", Description: "Organization GitHub App installation",
+		ID: "ctx_github_realmroot", Name: "realmroot", Description: "Organization GitHub App installation",
 		AuthorizationDetail:        map[string]any{"type": "github_installation", "installation_id": "42"},
 		Metadata:                   map[string]string{"accountType": "Organization"},
 		AccountAuthorizationStatus: "authorized", AuthorizedScopes: []string{"issues:read"},
@@ -325,7 +325,7 @@ func TestResourceServerContextUsesDisplayContractWithoutRawDetails(t *testing.T)
 		t.Fatal(err)
 	}
 	output := string(encoded)
-	if !summaries[0].Current || !strings.Contains(output, `"name":"realmroot"`) ||
+	if !summaries[0].Current || !strings.Contains(output, `"id":"ctx_github_realmroot"`) || !strings.Contains(output, `"name":"realmroot"`) ||
 		strings.Contains(output, "installation_id") || strings.Contains(output, "authorizationDetail") {
 		t.Fatalf("Context summaries = %s", output)
 	}

@@ -4785,6 +4785,7 @@ type ListResourceServerAuthorizationDetailsResponse struct {
 			AuthorizationDetail        ListResourceServerAuthorizationDetails200JSONResponseBody_Items_AuthorizationDetail      `json:"authorizationDetail"`
 			AuthorizedScopes           []string                                                                                 `json:"authorizedScopes"`
 			Description                string                                                                                   `json:"description"`
+			Id                         *string                                                                                  `json:"id"`
 			Metadata                   map[string]string                                                                        `json:"metadata"`
 			Name                       string                                                                                   `json:"name"`
 			RequestableScopes          []string                                                                                 `json:"requestableScopes"`
@@ -5707,6 +5708,7 @@ func ParseListResourceServerAuthorizationDetailsResponse(rsp *http.Response) (*L
 				AuthorizationDetail        ListResourceServerAuthorizationDetails200JSONResponseBody_Items_AuthorizationDetail      `json:"authorizationDetail"`
 				AuthorizedScopes           []string                                                                                 `json:"authorizedScopes"`
 				Description                string                                                                                   `json:"description"`
+				Id                         *string                                                                                  `json:"id"`
 				Metadata                   map[string]string                                                                        `json:"metadata"`
 				Name                       string                                                                                   `json:"name"`
 				RequestableScopes          []string                                                                                 `json:"requestableScopes"`
