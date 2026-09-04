@@ -90,7 +90,6 @@ func TestDetectAgentSessionReturnsRawRuntimeIdentifier(t *testing.T) {
 		environment map[string]string
 		expected    string
 	}{
-		{runtime: "codex", environment: map[string]string{"CODEX_THREAD_ID": "thread-1"}, expected: "thread-1"},
 		{runtime: "claude", environment: map[string]string{"CLAUDE_CODE_SESSION_ID": "session-2"}, expected: "session-2"},
 		{runtime: "copilot", environment: map[string]string{"COPILOT_AGENT_SESSION_ID": "session-3"}, expected: "session-3"},
 		{runtime: "goose", environment: map[string]string{"AGENT_SESSION_ID": "session-4"}, expected: "session-4"},
@@ -104,6 +103,25 @@ func TestDetectAgentSessionReturnsRawRuntimeIdentifier(t *testing.T) {
 	}
 	if sessionID, ok := detectAgentSession("codex", testEnvironment(nil)); ok || sessionID != "" {
 		t.Fatalf("missing session = %q, %v", sessionID, ok)
+	}
+}
+
+func TestDetectAgentSessionPrefersManagedCodexSession(t *testing.T) {
+	sessionID, ok := detectAgentSession("codex", testEnvironment(map[string]string{
+		"AGENT_SESSION_ID": "session-1",
+		"CODEX_THREAD_ID":  "thread-1",
+	}))
+	if !ok || sessionID != "session-1" {
+		t.Fatalf("Codex session = %q, %v", sessionID, ok)
+	}
+}
+
+func TestDetectAgentSessionFallsBackToCodexThread(t *testing.T) {
+	sessionID, ok := detectAgentSession("codex", testEnvironment(map[string]string{
+		"CODEX_THREAD_ID": "thread-1",
+	}))
+	if !ok || sessionID != "thread-1" {
+		t.Fatalf("Codex session = %q, %v", sessionID, ok)
 	}
 }
 

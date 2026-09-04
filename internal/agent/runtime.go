@@ -15,7 +15,7 @@ const (
 
 var sessionEnvironmentNames = map[string][]string{
 	"claude":  {"CLAUDE_CODE_SESSION_ID"},
-	"codex":   {"CODEX_THREAD_ID"},
+	"codex":   {"AGENT_SESSION_ID", "CODEX_THREAD_ID"},
 	"copilot": {"COPILOT_AGENT_SESSION_ID"},
 	"goose":   {"AGENT_SESSION_ID"},
 	"hermes":  {"HERMES_SESSION_ID", "HERMES_SESSION_KEY"},
