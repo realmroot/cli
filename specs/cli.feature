@@ -178,3 +178,11 @@ Feature: Realmroot Toolbox command line
     Then CLI submits the request without a permission precheck
     And an unsuccessful server response exits with code 1
     And JSON output preserves the server error code, message, request ID, and details
+
+  Scenario: A new Session acquires previously granted permissions automatically
+    Given its Agent already has permissions for the selected Resource Context
+    And the Session has no local credential binding
+    When it invokes a protected Toolbox operation or native command
+    Then Toolbox acquires only the existing permissions without interactive approval
+    And invokes the requested operation
+    And missing permissions still require an explicit access request

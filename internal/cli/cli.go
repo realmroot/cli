@@ -173,6 +173,9 @@ func (a *App) execCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if err := acquireExistingAuthority(command.Context(), service, accessService, server, details, selected); err != nil {
+				return err
+			}
 			runner := execution.NewRunner(service, httpClient, command.InOrStdin(), a.stdout, a.stderr, logger)
 			err = runner.Run(command.Context(), server, integrations, args, execution.RunOptions{
 				AuthorizationDetails:      selected,
@@ -350,7 +353,7 @@ func (a *App) toolboxCommand() *cobra.Command {
 			}
 			ctx, cancel := context.WithTimeout(command.Context(), 15*time.Minute)
 			defer cancel()
-			agentService, catalogClient, _, err := a.services()
+			agentService, catalogClient, httpClient, err := a.services()
 			if err != nil {
 				return err
 			}
@@ -375,7 +378,7 @@ func (a *App) toolboxCommand() *cobra.Command {
 			if a.search != "" || a.all {
 				return errors.New("--search and --all apply only to a Resource Server overview")
 			}
-			return a.runRestish(ctx, agentService, catalogClient, args)
+			return a.runRestish(ctx, agentService, catalogClient, httpClient, args)
 		},
 	}
 	command.Flags().String("output", "auto", "response format: auto, json, yaml, table, or raw")
@@ -904,12 +907,16 @@ func scopeList(scopes []string, expanded bool) string {
 	return fmt.Sprintf("%d available (add --all to list them)", len(scopes))
 }
 
-func (a *App) runRestish(ctx context.Context, service *agent.Service, client *catalog.Client, args []string) error {
+func (a *App) runRestish(ctx context.Context, service *agent.Service, client *catalog.Client, httpClient *http.Client, args []string) error {
 	config, servers, err := client.RestishConfig(ctx)
 	if err != nil {
 		return err
 	}
 	runtime, err := a.newRestishRuntime(service, config)
+	if err != nil {
+		return err
+	}
+	accessService, err := access.New(service, httpClient)
 	if err != nil {
 		return err
 	}
@@ -929,6 +936,9 @@ func (a *App) runRestish(ctx context.Context, service *agent.Service, client *ca
 			}
 			selected, err = a.resolveContext(service, server, details, a.context)
 			if err != nil {
+				return err
+			}
+			if err := acquireExistingAuthority(ctx, service, accessService, server, details, selected); err != nil {
 				return err
 			}
 		}
@@ -962,6 +972,9 @@ func (a *App) runRestish(ctx context.Context, service *agent.Service, client *ca
 			selected, contextErr := a.resolveContext(service, server, details, a.context)
 			if contextErr != nil {
 				return contextErr
+			}
+			if err := acquireExistingAuthority(ctx, service, accessService, server, details, selected); err != nil {
+				return err
 			}
 			binding, bindingErr := resolveCredentialBindingForOperation(service, server, operation, selected)
 			if bindingErr != nil {
