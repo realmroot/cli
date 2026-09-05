@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -26,10 +27,14 @@ type contextSummary struct {
 }
 
 type contextListItem struct {
-	ID                         string `json:"id,omitempty"`
-	Name                       string `json:"name"`
-	AccountAuthorizationStatus string `json:"accountAuthorizationStatus"`
-	Current                    bool   `json:"current"`
+	Type                       string   `json:"type"`
+	AuthorizedScopes           []string `json:"authorizedScopes"`
+	RequestableScopes          []string `json:"requestableScopes"`
+	UnavailableScopes          []string `json:"unavailableScopes"`
+	ID                         string   `json:"id,omitempty"`
+	Name                       string   `json:"name"`
+	AccountAuthorizationStatus string   `json:"accountAuthorizationStatus"`
+	Current                    bool     `json:"current"`
 }
 
 type contextResult struct {
@@ -50,10 +55,21 @@ func (e contextUnavailableError) Error() string {
 	return fmt.Sprintf("Context ID %q is not available", e.id)
 }
 
-func listContexts(details []catalog.AuthorizationDetail, selected []map[string]any) []contextListItem {
+func listContexts(details []catalog.AuthorizationDetail, selected []map[string]any, scopes ...catalog.Scope) []contextListItem {
 	result := make([]contextListItem, 0, len(details))
 	for _, detail := range details {
+		kind := "resource"
+		if detail.AuthorizationDetail["type"] == "realmroot_authority" {
+			kind, _ = detail.AuthorizationDetail["authority"].(string)
+		}
+		unavailable := []string{}
+		for _, scope := range scopes {
+			if !slices.Contains(detail.AuthorizedScopes, scope.Value) && !slices.Contains(detail.RequestableScopes, scope.Value) {
+				unavailable = append(unavailable, scope.Value)
+			}
+		}
 		result = append(result, contextListItem{
+			Type: kind, AuthorizedScopes: append([]string{}, detail.AuthorizedScopes...), RequestableScopes: append([]string{}, detail.RequestableScopes...), UnavailableScopes: unavailable,
 			ID: detail.ID, Name: detail.Name, AccountAuthorizationStatus: detail.AccountAuthorizationStatus,
 			Current: sameDetails(detail.AuthorizationDetail, selected),
 		})
@@ -100,7 +116,7 @@ func (a *App) contextCommand(ctx context.Context, service *agent.Service, client
 		return selectedErr
 	}
 	if len(args) == 0 {
-		return a.printContexts(contextResult{ResourceServer: server.CommandName, Contexts: listContexts(details, selected)})
+		return a.printContexts(contextResult{ResourceServer: server.CommandName, Contexts: listContexts(details, selected, server.Scopes...)})
 	}
 	if len(args) != 2 || (args[0] != "show" && args[0] != "use") {
 		return fmt.Errorf("usage: realmroot toolbox %s context [show|use] <context-id> | clear", server.CommandName)
@@ -213,7 +229,7 @@ func (a *App) printContexts(result contextResult) error {
 		return nil
 	}
 	w := tabwriter.NewWriter(a.stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "CURRENT\tID\tNAME\tACCOUNT")
+	fmt.Fprintln(w, "CURRENT\tID\tNAME\tTYPE\tACCOUNT\tAGENT GRANTED\tREQUESTABLE\tNOT CURRENTLY REQUESTABLE")
 	for _, item := range result.Contexts {
 		current := ""
 		if item.Current {
@@ -223,7 +239,7 @@ func (a *App) printContexts(result contextResult) error {
 		if id == "" {
 			id = "-"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", current, id, item.Name, item.AccountAuthorizationStatus)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", current, id, item.Name, item.Type, item.AccountAuthorizationStatus, scopeNames(item.AuthorizedScopes), scopeNames(item.RequestableScopes), scopeNames(item.UnavailableScopes))
 	}
 	return w.Flush()
 }
@@ -256,4 +272,11 @@ func (a *App) printContext(resourceServer string, item contextSummary) error {
 		fmt.Fprintln(a.stdout, "Current: yes")
 	}
 	return nil
+}
+
+func scopeNames(scopes []string) string {
+	if len(scopes) == 0 {
+		return "-"
+	}
+	return strings.Join(scopes, ", ")
 }

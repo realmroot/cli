@@ -310,6 +310,12 @@ func (a *App) requestCommand() *cobra.Command {
 			}
 			receipt, err := accessService.Request(ctx, server, scopes, details, reason, access.RequestOptions{Handoff: handoff})
 			if err != nil {
+				var responseError *access.ResponseError
+				if a.json && errors.As(err, &responseError) && json.Valid(responseError.Body) {
+					if printErr := a.printJSON(json.RawMessage(responseError.Body)); printErr != nil {
+						return printErr
+					}
+				}
 				return err
 			}
 			return a.printJSON(receipt)

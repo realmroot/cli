@@ -227,6 +227,17 @@ func receipt(server catalog.ResourceServer, resource string, scopes []string) Re
 	return Receipt{Status: "ready", ResourceServer: server.CommandName, ResourceIndicator: resource, Scopes: scopes}
 }
 
+// ResponseError preserves the server response without inventing a client error code.
+type ResponseError struct {
+	Operation  string
+	StatusCode int
+	Body       []byte
+}
+
+func (e *ResponseError) Error() string {
+	return fmt.Sprintf("%s: HTTP %d: %s", e.Operation, e.StatusCode, strings.TrimSpace(string(e.Body)))
+}
+
 func apiError(operation string, status int, body []byte) error {
-	return fmt.Errorf("%s: HTTP %d: %s", operation, status, strings.TrimSpace(string(body)))
+	return &ResponseError{Operation: operation, StatusCode: status, Body: append([]byte(nil), body...)}
 }

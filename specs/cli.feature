@@ -80,7 +80,8 @@ Feature: Realmroot Toolbox command line
   Scenario: Inspect and select one Resource Server Context
     Given the Resource Server exposes one or more Contexts with service-defined names and attributes
     When the Agent runs "realmroot toolbox github context"
-    Then Toolbox lists each stable Context ID, display name, authorization status, and current selection
+    Then Toolbox lists every stable Context ID, display name, identity type, authorization status, and current selection
+    And the ordinary list includes Agent-granted scopes, requestable scopes, and published scopes not currently requestable
     And Context details show the Resource Server supplied description and attributes
     When the Agent selects the Context by its stable ID
     Then subsequent GitHub operations use that Context by default
@@ -170,3 +171,10 @@ Feature: Realmroot Toolbox command line
     Then Wrangler API traffic is routed through the Cloudflare Resource Server
     And existing Cloudflare credentials are removed from the child environment
     And Cloudflare asset-upload credentials remain process-local and are accepted only for their matching upload session
+
+  @journey:server-access-error @entrypoint:agent-request
+  Scenario: Preserve the server decision when requesting authority
+    When the Agent requests scopes in a selected Context
+    Then CLI submits the request without a permission precheck
+    And an unsuccessful server response exits with code 1
+    And JSON output preserves the server error code, message, request ID, and details

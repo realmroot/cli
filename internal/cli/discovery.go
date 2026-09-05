@@ -195,7 +195,7 @@ func buildResourceServerOverview(server catalog.ResourceServer, details []catalo
 	}
 	if !options.All && resourceServerInventoryIsLarge(server, details, operations) {
 		overview.Mode = overviewModeCompact
-		overview.Contexts = listContexts(details, selected)
+		overview.Contexts = listContexts(details, selected, server.Scopes...)
 		if len(overview.Contexts) > maxCompactAuthorization {
 			overview.Contexts = overview.Contexts[:maxCompactAuthorization]
 			overview.ContextTruncated = true
@@ -204,7 +204,7 @@ func buildResourceServerOverview(server catalog.ResourceServer, details []catalo
 	}
 	overview.Mode = overviewModeExpanded
 	overview.Scopes = append([]catalog.Scope(nil), server.Scopes...)
-	overview.Contexts = listContexts(details, selected)
+	overview.Contexts = listContexts(details, selected, server.Scopes...)
 	overview.Operations = summarizeOperations(operations, "")
 	return overview
 }

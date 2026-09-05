@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -15,6 +16,40 @@ import (
 var (
 	errAccessRequested = errors.New("access requested")
 )
+
+// Keep the real generated HTTP client; only bypass identity signing in this transport test.
+type unsignedHTTPClient struct {
+	*realmrootapi.ClientWithResponses
+}
+
+func (c unsignedHTTPClient) CreateAgentAuthorizationRequestWithResponse(ctx context.Context, body realmrootapi.CreateAgentAuthorizationRequestJSONRequestBody, _ ...realmrootapi.RequestEditorFn) (*realmrootapi.CreateAgentAuthorizationRequestResponse, error) {
+	return c.ClientWithResponses.CreateAgentAuthorizationRequestWithResponse(ctx, body)
+}
+
+func TestRequestPreservesHTTPServerError(t *testing.T) {
+	calls := 0
+	body := `{"error":{"code":"bad_request","message":"Controller cannot grant these scopes. No approval request was created.","requestId":"request-1","details":{"context":{"id":"user-1","type":"user"},"scopes":["applications:read"]}}}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.Method != "POST" || !strings.HasSuffix(r.URL.Path, "/agent/access-requests") {
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(body))
+	}))
+	defer server.Close()
+	client, err := realmrootapi.NewClientWithResponses(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := &Service{api: unsignedHTTPClient{client}}
+	_, err = service.Request(context.Background(), catalog.ResourceServer{ID: "resource-1"}, []string{"applications:read"}, []map[string]any{{"type": "realmroot_authority", "authority": "user", "id": "user-1"}}, "inspect", RequestOptions{})
+	var responseError *ResponseError
+	if !errors.As(err, &responseError) || responseError.StatusCode != 400 || string(responseError.Body) != body || calls != 1 {
+		t.Fatalf("HTTP error not preserved: %v (calls=%d)", err, calls)
+	}
+}
 
 type recordingClient struct {
 	accessRequests int

@@ -135,6 +135,14 @@ installations, or other Contexts defined by that Resource Server. `context show`
 prints its service-defined description and safe attributes; `context use`
 selects the default. Context selection is independent of permission requests
 and credential storage.
+The ordinary Context list includes Agent-granted scopes, requestable scopes, and
+published scopes not currently requestable. These describe current permissions;
+external accounts may require connection or expanded authorization.
+
+Access requests always go to the server for authorization checks. CLI does not
+precheck permissions or change Contexts. Server errors retain a nonzero exit
+status; `--json` preserves the server error body on stdout, with diagnostics on
+stderr.
 
 Use `realmroot toolbox sync <resource-server>` after that Resource Server
 publishes a changed OpenAPI contract. Sync bypasses the cached OpenAPI document
