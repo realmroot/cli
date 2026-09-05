@@ -13,7 +13,6 @@ var toolboxCommands = []CommandHelp{
 
 var resourceServerCommands = []CommandHelp{
 	{Name: "context", Usage: "<resource-server> context", Description: "list available Contexts"},
-	{Name: "context", Usage: "<resource-server> context --scope <scope>...", Description: "compare permission matches across all Contexts"},
 	{Name: "context", Usage: "<resource-server> context show <context-id>", Description: "show one Context"},
 	{Name: "context", Usage: "<resource-server> context [use <context-id>|clear]", Description: "select or clear the default Context"},
 }

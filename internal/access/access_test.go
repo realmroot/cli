@@ -28,14 +28,14 @@ func (c unsignedHTTPClient) CreateAgentAuthorizationRequestWithResponse(ctx cont
 
 func TestRequestPreservesHTTPServerError(t *testing.T) {
 	calls := 0
-	body := `{"error":{"code":"requested_scopes_exceed_controller_boundary","message":"Controller cannot grant these scopes. No approval request was created.","requestId":"request-1","details":{"context":{"id":"user-1","type":"user"},"scopes":["applications:read"]}}}`
+	body := `{"error":{"code":"bad_request","message":"Controller cannot grant these scopes. No approval request was created.","requestId":"request-1","details":{"context":{"id":"user-1","type":"user"},"scopes":["applications:read"]}}}`
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		if r.Method != "POST" || !strings.HasSuffix(r.URL.Path, "/agent/access-requests") {
 			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusForbidden)
+		w.WriteHeader(http.StatusBadRequest)
 		_, _ = w.Write([]byte(body))
 	}))
 	defer server.Close()
@@ -46,7 +46,7 @@ func TestRequestPreservesHTTPServerError(t *testing.T) {
 	service := &Service{api: unsignedHTTPClient{client}}
 	_, err = service.Request(context.Background(), catalog.ResourceServer{ID: "resource-1"}, []string{"applications:read"}, []map[string]any{{"type": "realmroot_authority", "authority": "user", "id": "user-1"}}, "inspect", RequestOptions{})
 	var responseError *ResponseError
-	if !errors.As(err, &responseError) || responseError.StatusCode != 403 || string(responseError.Body) != body || calls != 1 {
+	if !errors.As(err, &responseError) || responseError.StatusCode != 400 || string(responseError.Body) != body || calls != 1 {
 		t.Fatalf("HTTP error not preserved: %v (calls=%d)", err, calls)
 	}
 }
