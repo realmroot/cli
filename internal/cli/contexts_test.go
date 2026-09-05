@@ -59,7 +59,7 @@ func TestResolveContextUsesResourceTemplatesBeforeTheAccountIsConnected(t *testi
 	}
 }
 
-func TestResolveContextGuidesAMissingNamedContextToConnections(t *testing.T) {
+func TestResolveContextGuidesAMissingContextIDToConnections(t *testing.T) {
 	// [spec: cli/missing-context-guidance]
 	t.Setenv("REALMROOT_STATE_DIR", t.TempDir())
 	service, err := agent.NewService("https://id.example.com", http.DefaultClient)
@@ -70,43 +70,86 @@ func TestResolveContextGuidesAMissingNamedContextToConnections(t *testing.T) {
 		CommandName: "github", ResourceURL: "https://api.example.com", ConnectionStatus: "connected",
 	}
 	existing := []catalog.AuthorizationDetail{{
-		Name: "existing-org", AuthorizationDetail: map[string]any{"type": "installation", "installation_id": "701"},
+		ID: "ctx_existing", Name: "existing-org", AuthorizationDetail: map[string]any{"type": "installation", "installation_id": "701"},
 	}}
 
-	selected, err := (&App{}).resolveContext(service, server, existing, "new-org")
+	selected, err := (&App{}).resolveContext(service, server, existing, "ctx_missing")
 	if selected != nil || err == nil {
 		t.Fatalf("selected=%#v err=%v", selected, err)
 	}
-	want := `Context "new-org" is not available; connect or update it in Realmroot Connections: https://id.example.com/connections`
+	want := `Context ID "ctx_missing" is not available; connect or update it in Realmroot Connections: https://id.example.com/connections`
 	if err.Error() != want {
 		t.Fatalf("error = %q, want %q", err, want)
 	}
 }
 
-func TestNamedContextUsesAUniqueCaseInsensitiveProviderName(t *testing.T) {
-	detail := catalog.AuthorizationDetail{
-		Name:                "wakatoken",
-		AuthorizationDetail: map[string]any{"type": "installation", "installation_id": "702"},
+func TestContextByIDSelectsStableIDDespiteDuplicateNames(t *testing.T) {
+	// [spec: cli/resource-server-context]
+	details := []catalog.AuthorizationDetail{
+		{ID: "ctx_first", Name: "wakatoken", AuthorizationDetail: map[string]any{"installation_id": "701"}},
+		{ID: "ctx_second", Name: "wakatoken", AuthorizationDetail: map[string]any{"installation_id": "702"}},
 	}
-	selected, err := namedContext([]catalog.AuthorizationDetail{detail}, "WakaToken")
-	if err != nil {
-		t.Fatal(err)
+	selected, err := contextBySelector(details, "ctx_second")
+	if err != nil || selected.AuthorizationDetail["installation_id"] != "702" {
+		t.Fatalf("selected=%#v err=%v", selected, err)
 	}
-	if !sameDetails(detail.AuthorizationDetail, []map[string]any{selected.AuthorizationDetail}) {
-		t.Fatalf("selected Context = %#v", selected)
+	if _, err := contextBySelector(details, "wakatoken"); err == nil || err.Error() != `Context ID "wakatoken" is not available` {
+		t.Fatalf("name selection error = %v", err)
 	}
 }
 
-func TestNamedContextPrefersExactCaseAndRejectsFoldedAmbiguity(t *testing.T) {
+func TestContextSelectorKeepsTemporaryNameCompatibilityOnlyWithoutIDs(t *testing.T) {
+	detail := catalog.AuthorizationDetail{
+		Name:                "legacy-workspace",
+		AuthorizationDetail: map[string]any{"type": "workspace", "id": "workspace-1"},
+	}
+	selected, err := contextBySelector([]catalog.AuthorizationDetail{detail}, "LEGACY-WORKSPACE")
+	if err != nil || !sameDetails(detail.AuthorizationDetail, []map[string]any{selected.AuthorizationDetail}) {
+		t.Fatalf("selected=%#v err=%v", selected, err)
+	}
+}
+
+func TestResolveContextAutomaticallyUsesOnlyContextWithoutSaving(t *testing.T) {
+	// [spec: cli/resource-server-context]
+	t.Setenv("REALMROOT_STATE_DIR", t.TempDir())
+	service, err := agent.NewService("https://id.example.com", http.DefaultClient)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := catalog.ResourceServer{CommandName: "example", ResourceURL: "https://api.example.com"}
+	detail := catalog.AuthorizationDetail{ID: "ctx_only", AuthorizationDetail: map[string]any{"type": "workspace", "id": "only"}}
+	selected, err := (&App{}).resolveContext(service, server, []catalog.AuthorizationDetail{detail}, "")
+	if err != nil || !sameDetails(detail.AuthorizationDetail, selected) {
+		t.Fatalf("selected=%#v err=%v", selected, err)
+	}
+	if _, err := service.SelectedContext(server.ResourceURL); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("automatic selection was saved: %v", err)
+	}
+	if _, err := (&App{}).resolveContext(service, server, []catalog.AuthorizationDetail{detail}, "ctx_missing"); err == nil {
+		t.Fatal("explicit missing Context must fail")
+	}
+	if err := service.StoreContext(server.ResourceURL, []map[string]any{{"type": "workspace", "id": "removed"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (&App{}).resolveContext(service, server, []catalog.AuthorizationDetail{detail}, ""); err == nil {
+		t.Fatal("stale selection must not switch to the only Context")
+	}
+}
+
+func TestOverviewMarksOnlySelectedLegacyContext(t *testing.T) {
+	// [spec: cli/resource-server-context]
 	details := []catalog.AuthorizationDetail{
-		{Name: "wakatoken", AuthorizationDetail: map[string]any{"installation_id": "701"}},
-		{Name: "WakaToken", AuthorizationDetail: map[string]any{"installation_id": "702"}},
+		{Name: "first", AuthorizationDetail: map[string]any{"type": "workspace", "id": "first"}},
+		{Name: "second", AuthorizationDetail: map[string]any{"type": "workspace", "id": "second"}},
 	}
-	selected, err := namedContext(details, "WakaToken")
-	if err != nil || selected.AuthorizationDetail["installation_id"] != "702" {
-		t.Fatalf("exact selected=%#v err=%v", selected, err)
-	}
-	if _, err := namedContext(details, "WAKATOKEN"); err == nil || err.Error() != `Context name "WAKATOKEN" is ambiguous` {
-		t.Fatalf("folded ambiguity error = %v", err)
+	for _, compact := range []bool{false, true} {
+		server := catalog.ResourceServer{CommandName: "example"}
+		if compact {
+			server.Scopes = make([]catalog.Scope, 252)
+		}
+		overview := buildResourceServerOverview(server, details, nil, discoveryOptions{}, []map[string]any{details[1].AuthorizationDetail})
+		if len(overview.Contexts) != 2 || overview.Contexts[0].Current || !overview.Contexts[1].Current {
+			t.Fatalf("compact=%v contexts=%#v", compact, overview.Contexts)
+		}
 	}
 }

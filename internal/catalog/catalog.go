@@ -41,6 +41,7 @@ type ResourceServer struct {
 }
 
 type AuthorizationDetail struct {
+	ID                         string            `json:"id"`
 	Name                       string            `json:"name"`
 	Description                string            `json:"description,omitempty"`
 	AuthorizationDetail        map[string]any    `json:"authorizationDetail"`
@@ -177,6 +178,10 @@ func (c *Client) AuthorizationDetails(ctx context.Context, server ResourceServer
 			return nil, responseError("list Resource Server authorization details", response.StatusCode(), response.Body)
 		}
 		for _, item := range response.JSON200.Items {
+			id := ""
+			if item.Id != nil {
+				id = *item.Id
+			}
 			detail := map[string]any{"type": item.AuthorizationDetail.Type}
 			for name, value := range item.AuthorizationDetail.AdditionalProperties {
 				detail[name] = value
@@ -184,7 +189,7 @@ func (c *Client) AuthorizationDetails(ctx context.Context, server ResourceServer
 			description := ""
 			description = item.Description
 			result = append(result, AuthorizationDetail{
-				Name: item.Name, Description: description, AuthorizationDetail: detail,
+				ID: id, Name: item.Name, Description: description, AuthorizationDetail: detail,
 				AccountAuthorizationStatus: string(item.AccountAuthorizationStatus),
 				AuthorizedScopes:           append([]string(nil), item.AuthorizedScopes...),
 				RequestableScopes:          append([]string(nil), item.RequestableScopes...), Metadata: item.Metadata,

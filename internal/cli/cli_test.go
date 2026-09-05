@@ -232,8 +232,8 @@ func TestToolboxHelpDocumentsLocalCommandSurface(t *testing.T) {
 		"sync <resource-server>",
 		"get|head|post|put|patch|delete <resource-server>/<path>",
 		"<resource-server> context",
-		"<resource-server> context show <name>",
-		"<resource-server> context [use <name>|clear]",
+		"<resource-server> context show <context-id>",
+		"<resource-server> context [use <context-id>|clear]",
 	} {
 		if !strings.Contains(output, expected) {
 			t.Fatalf("help omitted %q:\n%s", expected, output)
@@ -313,7 +313,7 @@ func TestParseExecFlagsConsumesLogLevelBeforeNativeSeparator(t *testing.T) {
 func TestResourceServerContextUsesDisplayContractWithoutRawDetails(t *testing.T) {
 	// [spec: cli/resource-server-context]
 	details := []catalog.AuthorizationDetail{{
-		Name: "realmroot", Description: "Organization GitHub App installation",
+		ID: "ctx_github_realmroot", Name: "realmroot", Description: "Organization GitHub App installation",
 		AuthorizationDetail:        map[string]any{"type": "github_installation", "installation_id": "42"},
 		Metadata:                   map[string]string{"accountType": "Organization"},
 		AccountAuthorizationStatus: "authorized", AuthorizedScopes: []string{"issues:read"},
@@ -325,7 +325,7 @@ func TestResourceServerContextUsesDisplayContractWithoutRawDetails(t *testing.T)
 		t.Fatal(err)
 	}
 	output := string(encoded)
-	if !summaries[0].Current || !strings.Contains(output, `"name":"realmroot"`) ||
+	if !summaries[0].Current || !strings.Contains(output, `"id":"ctx_github_realmroot"`) || !strings.Contains(output, `"name":"realmroot"`) ||
 		strings.Contains(output, "installation_id") || strings.Contains(output, "authorizationDetail") {
 		t.Fatalf("Context summaries = %s", output)
 	}
@@ -859,7 +859,7 @@ func TestSmallResourceServerOverviewIncludesCompleteInventory(t *testing.T) {
 	details := []catalog.AuthorizationDetail{{Name: "wallet"}}
 	operations := []restish.OperationInspection{{ID: "showWallet", Command: []string{"wallet", "show"}, Method: "GET"}}
 
-	overview := buildResourceServerOverview(server, details, operations, discoveryOptions{})
+	overview := buildResourceServerOverview(server, details, operations, discoveryOptions{}, nil)
 
 	if overview.Mode != overviewModeExpanded || len(overview.Scopes) != 1 || len(overview.Contexts) != 1 || len(overview.Operations) != 1 {
 		t.Fatalf("overview = %#v", overview)
@@ -870,7 +870,7 @@ func TestLargeResourceServerOverviewIsCompact(t *testing.T) {
 	server := catalog.ResourceServer{CommandName: "cloudflare", ConnectionScopes: []string{"zone.read"}, Scopes: make([]catalog.Scope, 252)}
 	operations := makeOperations(2652)
 
-	overview := buildResourceServerOverview(server, nil, operations, discoveryOptions{})
+	overview := buildResourceServerOverview(server, nil, operations, discoveryOptions{}, nil)
 
 	if overview.Mode != overviewModeCompact || len(overview.Scopes) != 0 || len(overview.Operations) != 0 {
 		t.Fatalf("overview = %#v", overview)
@@ -887,7 +887,7 @@ func TestCompactOverviewKeepsBoundedAuthorizationDetails(t *testing.T) {
 		details[index] = catalog.AuthorizationDetail{Name: "account", AuthorizationDetail: map[string]any{"type": "cloudflare_account"}}
 	}
 
-	overview := buildResourceServerOverview(server, details, makeOperations(80), discoveryOptions{})
+	overview := buildResourceServerOverview(server, details, makeOperations(80), discoveryOptions{}, nil)
 
 	if overview.Mode != overviewModeCompact || len(overview.Contexts) != maxCompactAuthorization || !overview.ContextTruncated {
 		t.Fatalf("overview = %#v", overview)
@@ -902,7 +902,7 @@ func TestResourceServerSearchIsBoundedAndKeepsOperationSecurity(t *testing.T) {
 		operations[index].CredentialAlternatives = [][]restish.CredentialRequirementInspection{{{ID: "oauth2", Needs: []string{"workers-routes.read"}}}}
 	}
 
-	overview := buildResourceServerOverview(server, nil, operations, discoveryOptions{Search: "worker routes"})
+	overview := buildResourceServerOverview(server, nil, operations, discoveryOptions{Search: "worker routes"}, nil)
 
 	if overview.Mode != overviewModeFiltered || overview.MatchCount != 80 || len(overview.Operations) != maxDiscoveryResults || !overview.Truncated {
 		t.Fatalf("overview = %#v", overview)
@@ -920,7 +920,7 @@ func TestScopeFilterKeepsOnlyMatchingScopeAlternativesAndHidesCredentialSchemes(
 			{{ID: "realmrootOidc", Kind: "oauth2", Needs: []string{"metadata:read"}}},
 		},
 	}}
-	overview := buildResourceServerOverview(catalog.ResourceServer{CommandName: "github"}, nil, operations, discoveryOptions{Scope: "contents:read"})
+	overview := buildResourceServerOverview(catalog.ResourceServer{CommandName: "github"}, nil, operations, discoveryOptions{Scope: "contents:read"}, nil)
 
 	if got := operationScopeSummary(overview.Operations[0]); got != "contents:read" {
 		t.Fatalf("scope summary = %q", got)
@@ -966,7 +966,7 @@ func TestResourceServerAllExplicitlyExpandsLargeInventory(t *testing.T) {
 	server := catalog.ResourceServer{CommandName: "cloudflare", Scopes: make([]catalog.Scope, 252)}
 	operations := makeOperations(80)
 
-	overview := buildResourceServerOverview(server, nil, operations, discoveryOptions{All: true})
+	overview := buildResourceServerOverview(server, nil, operations, discoveryOptions{All: true}, nil)
 
 	if overview.Mode != overviewModeExpanded || len(overview.Scopes) != 252 || len(overview.Operations) != 80 || overview.Truncated {
 		t.Fatalf("overview = %#v", overview)
