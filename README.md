@@ -136,6 +136,21 @@ prints its service-defined description and safe attributes; `context use`
 selects the default. Context selection is independent of permission requests
 and credential storage.
 
+The list includes each Context's type and authorized/requestable scope counts.
+Use `realmroot toolbox platform context --scope applications:read --scope permissions:read`
+to compare permission matches across the complete list. This does not filter or
+select Contexts. Before requesting approval, CLI prints the selected Context and
+whether it came from `--context`, a saved default, or the sole available choice.
+The server checks native scopes against that Context's controller boundary before
+creating an approval request. CLI permission matches are informational only. Select the intended Context explicitly and retry. JSON request
+results include this selection metadata; preflight diagnostics go to stderr.
+Server failures exit with code 1. With `--json`, stdout preserves the server's JSON
+error response, including `error.code`, `message`, `requestId`, and `details`.
+The server returns `requested_scopes_exceed_controller_boundary` for scopes the
+controller cannot grant, with the Context and offending scopes in `details`.
+CLI does not infer this error from discovery or synthesize server error codes.
+Diagnostics remain on stderr.
+
 Use `realmroot toolbox sync <resource-server>` after that Resource Server
 publishes a changed OpenAPI contract. Sync bypasses the cached OpenAPI document
 and atomically refreshes the generated command catalog. It does not request

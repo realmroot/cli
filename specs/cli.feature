@@ -80,7 +80,8 @@ Feature: Realmroot Toolbox command line
   Scenario: Inspect and select one Resource Server Context
     Given the Resource Server exposes one or more Contexts with service-defined names and attributes
     When the Agent runs "realmroot toolbox github context"
-    Then Toolbox lists each stable Context ID, display name, authorization status, and current selection
+    Then Toolbox lists every Context with its stable ID, name, type, authorization status, permission counts, and current selection
+    And repeated "--scope" options on the Context list show matching authorized, requestable, and unavailable scopes without filtering Contexts
     And Context details show the Resource Server supplied description and attributes
     When the Agent selects the Context by its stable ID
     Then subsequent GitHub operations use that Context by default
@@ -105,6 +106,18 @@ Feature: Realmroot Toolbox command line
     And the controller interaction is opened and polled by default
     And the resulting credential offer is stored without a target private key or access token
     And the command returns only the ready authority without exposing the internal credential binding
+
+  @journey:access-context-preflight @entrypoint:agent-request
+  Scenario: Inspect the selected Context before requesting authority
+    Given the Resource Server publishes Contexts and their authorized and requestable scopes
+    When the Agent requests scopes using an explicit, saved, or sole available Context
+    Then Toolbox reports the Context ID, name, type, and selection source before requesting approval
+    And it shows every Context's match for the requested scopes without changing the selected Context
+    And the CLI submits the selected Context and scopes to the server even when the discovery catalog reports missing permissions
+    And the server rejects scopes outside the controller boundary before creating an approval request
+    And a controller boundary failure exits with code 1 and preserves the server JSON error body including its code, message, request ID, and details
+    And pending and completed JSON results preserve the selected Context and selection source
+    But external account connection or scope expansion can still proceed through controller approval
 
   @journey:task-scoped-access-handoff @entrypoint:agent-request
   Scenario: Hand an approval link to a remote controller
