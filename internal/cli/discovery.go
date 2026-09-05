@@ -178,7 +178,7 @@ func executionScopes(details []catalog.AuthorizationDetail, selected []map[strin
 	return result
 }
 
-func buildResourceServerOverview(server catalog.ResourceServer, details []catalog.AuthorizationDetail, operations []restish.OperationInspection, options discoveryOptions) resourceServerOverview {
+func buildResourceServerOverview(server catalog.ResourceServer, details []catalog.AuthorizationDetail, operations []restish.OperationInspection, options discoveryOptions, selected []map[string]any) resourceServerOverview {
 	overview := resourceServerOverview{
 		ResourceServer: summarizeResourceServer(server), ScopeCount: len(server.Scopes),
 		ContextCount: len(details), OperationCount: len(operations), Search: options.Search, Scope: options.Scope,
@@ -195,7 +195,7 @@ func buildResourceServerOverview(server catalog.ResourceServer, details []catalo
 	}
 	if !options.All && resourceServerInventoryIsLarge(server, details, operations) {
 		overview.Mode = overviewModeCompact
-		overview.Contexts = listContexts(details, nil)
+		overview.Contexts = listContexts(details, selected)
 		if len(overview.Contexts) > maxCompactAuthorization {
 			overview.Contexts = overview.Contexts[:maxCompactAuthorization]
 			overview.ContextTruncated = true
@@ -204,7 +204,7 @@ func buildResourceServerOverview(server catalog.ResourceServer, details []catalo
 	}
 	overview.Mode = overviewModeExpanded
 	overview.Scopes = append([]catalog.Scope(nil), server.Scopes...)
-	overview.Contexts = listContexts(details, nil)
+	overview.Contexts = listContexts(details, selected)
 	overview.Operations = summarizeOperations(operations, "")
 	return overview
 }

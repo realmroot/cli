@@ -636,18 +636,11 @@ func (a *App) showResourceServer(ctx context.Context, service *agent.Service, cl
 	if err != nil {
 		return err
 	}
-	overview := buildResourceServerOverview(server, details, inspection.Operations, a.discoveryOptions())
 	selected, selectedErr := service.SelectedContext(server.ResourceURL)
 	if selectedErr != nil && !errors.Is(selectedErr, os.ErrNotExist) {
 		return selectedErr
 	}
-	for index := range overview.Contexts {
-		for _, detail := range details {
-			if detail.ID == overview.Contexts[index].ID && sameDetails(detail.AuthorizationDetail, selected) {
-				overview.Contexts[index].Current = true
-			}
-		}
-	}
+	overview := buildResourceServerOverview(server, details, inspection.Operations, a.discoveryOptions(), selected)
 	effectiveSelected := selected
 	var effectiveDetail *catalog.AuthorizationDetail
 	if a.context != "" {
