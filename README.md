@@ -244,3 +244,11 @@ go vet ./...
 ```
 
 Licensed under Apache-2.0.
+
+### Permissions provisioned before execution
+
+When a controller has already granted permissions, a new Session automatically
+acquires the selected Context's existing authority before a protected Toolbox
+operation or native command. This does not expand the Agent's permissions or
+open interactive approval. Missing permissions still require `realmroot agent
+request`. The Session keeps its own credential binding and DPoP key.
