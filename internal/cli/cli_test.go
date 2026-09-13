@@ -19,6 +19,7 @@ import (
 	"github.com/realmroot/cli/internal/buildinfo"
 	"github.com/realmroot/cli/internal/catalog"
 	restish "github.com/saltbo/restish/v2"
+	"github.com/saltbo/restish/v2/config"
 )
 
 func TestPrepareGenericIdempotencyLeavesUnprotectedOperationUnchanged(t *testing.T) {
@@ -289,6 +290,243 @@ func TestParseToolboxFlags(t *testing.T) {
 	if err != nil || !app.json || app.search != "list zones" || app.scope != "zone.read" || strings.Join(args, " ") != "--rsh-content-type json --rsh-validate github repos get" {
 		t.Fatalf("args=%v json=%v search=%q scope=%q err=%v", args, app.json, app.search, app.scope, err)
 	}
+}
+
+func TestParseToolboxFlagsTranslatesPaginationControls(t *testing.T) {
+	app := &App{}
+	args, err := app.parseToolboxFlags([]string{
+		"agent-kanban", "task", "list-tasks",
+		"--page-size", "2",
+		"--no-paginate",
+		"--max-pages=1",
+		"--max-items", "3",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "agent-kanban task list-tasks --page-size 2 --rsh-no-paginate --rsh-max-pages=1 --rsh-max-items 3"
+	if strings.Join(args, " ") != want {
+		t.Fatalf("args = %q, want %q", strings.Join(args, " "), want)
+	}
+}
+
+func TestGeneratedListHelpDocumentsProductPaginationControls(t *testing.T) {
+	help := appendGeneratedPaginationHelp("Usage:\n  realmroot toolbox agent-kanban task list-tasks [flags]\n\nFlags:\n      --page-size int   items per page\n", restish.OperationInspection{
+		ID: "listTasks", Command: []string{"task", "list-tasks"}, Method: http.MethodGet,
+	})
+	for _, expected := range []string{
+		"--page-size int",
+		"automatically follow pagination links",
+		"--page-size for per-page size",
+		"--max-items for a total item cap",
+		"--no-paginate",
+		"--max-pages int",
+		"--max-items int",
+		"maximum total items",
+	} {
+		if !strings.Contains(help, expected) {
+			t.Fatalf("help omitted %q:\n%s", expected, help)
+		}
+	}
+	if strings.Contains(help, "--rsh-") {
+		t.Fatalf("help exposed internal flag:\n%s", help)
+	}
+}
+
+func TestGeneratedOperationHelpExecutionPrintsPaginationOnce(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	runtime := newEmbeddedGeneratedListRuntime(t, &stdout, &stderr, nil)
+	helpWriter := &operationHelpWriter{
+		out:       &stdout,
+		operation: restish.OperationInspection{ID: "listTasks", Command: []string{"task", "list-tasks"}, Method: http.MethodGet},
+	}
+	runtime.Stdout = helpWriter
+	runtime.Stderr = productVocabularyWriter{out: &stderr}
+
+	if err := runtime.Run([]string{"realmroot toolbox", "agent-kanban", "task", "list-tasks", "--help"}); err != nil {
+		t.Fatal(toolboxRuntimeError{cause: err})
+	}
+	if err := helpWriter.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	output := stdout.String()
+	for _, section := range []string{"Usage:", "Flags:", "Pagination Options:"} {
+		if got := strings.Count(output, section); got != 1 {
+			t.Fatalf("%q count = %d, want 1:\n%s", section, got, output)
+		}
+	}
+	for _, expected := range []string{"automatically follow pagination links", "--page-size for per-page size", "--max-items for a total item cap"} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("help omitted %q:\n%s", expected, output)
+		}
+	}
+	if strings.Contains(output, "--rsh-") {
+		t.Fatalf("help exposed internal flag:\n%s", output)
+	}
+}
+
+func TestProductVocabularyWriterRewritesPaginationWarnings(t *testing.T) {
+	var stderr bytes.Buffer
+	writer := productVocabularyWriter{out: &stderr}
+	if _, err := writer.Write([]byte("pagination stopped at --rsh-max-pages=1; reached --rsh-max-items limit (3)\n")); err != nil {
+		t.Fatal(err)
+	}
+	if got := stderr.String(); got != "pagination stopped at --max-pages=1; reached --max-items limit (3)\n" {
+		t.Fatalf("stderr = %q", got)
+	}
+}
+
+func TestEmbeddedGeneratedListPaginationUsesTranslatedProductFlags(t *testing.T) {
+	for _, test := range []struct {
+		name         string
+		flags        []string
+		wantRequests int
+		wantWarning  string
+		wantItems    []string
+	}{
+		{
+			name: "first page only",
+			flags: []string{
+				"--no-paginate",
+			},
+			wantRequests: 1,
+			wantItems:    []string{`"id": 1`, `"id": 2`},
+		},
+		{
+			name: "max pages warning",
+			flags: []string{
+				"--max-pages", "1",
+			},
+			wantRequests: 1,
+			wantWarning:  "pagination stopped at --max-pages=1; pass 0 for unlimited",
+			wantItems:    []string{`"id": 1`, `"id": 2`},
+		},
+		{
+			name: "max items total",
+			flags: []string{
+				"--max-items", "3",
+			},
+			wantRequests: 2,
+			wantWarning:  "reached --max-items limit (3); stopping pagination",
+			wantItems:    []string{`"id": 1`, `"id": 2`, `"id": 3`},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			stdout, stderr, requests := runEmbeddedGeneratedList(t, test.flags...)
+			if *requests != test.wantRequests {
+				t.Fatalf("requests = %d, want %d; stdout=%s stderr=%s", *requests, test.wantRequests, stdout, stderr)
+			}
+			for _, item := range test.wantItems {
+				if !strings.Contains(stdout, item) {
+					t.Fatalf("stdout omitted %q:\n%s", item, stdout)
+				}
+			}
+			if test.name == "max items total" && strings.Contains(stdout, `"id": 4`) {
+				t.Fatalf("max-items output included fourth item:\n%s", stdout)
+			}
+			if test.wantWarning != "" && !strings.Contains(stderr, test.wantWarning) {
+				t.Fatalf("stderr omitted %q:\n%s", test.wantWarning, stderr)
+			}
+			if strings.Contains(stderr, "--rsh-") {
+				t.Fatalf("stderr exposed internal flag:\n%s", stderr)
+			}
+		})
+	}
+}
+
+func runEmbeddedGeneratedList(t *testing.T, publicFlags ...string) (string, string, *int) {
+	t.Helper()
+	requests := 0
+	var stdout, stderr bytes.Buffer
+	runtime := newEmbeddedGeneratedListRuntime(t, &stdout, &stderr, &requests)
+	app := &App{}
+	args, err := app.parseToolboxFlags(append([]string{"agent-kanban", "task", "list-tasks", "--page-size", "2", "--output", "json"}, publicFlags...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime.Stderr = productVocabularyWriter{out: &stderr}
+	if err := runtime.Run(append([]string{"realmroot toolbox"}, args...)); err != nil {
+		t.Fatal(toolboxRuntimeError{cause: err})
+	}
+	return stdout.String(), stderr.String(), &requests
+}
+
+func newEmbeddedGeneratedListRuntime(t *testing.T, stdout, stderr *bytes.Buffer, requests *int) *restish.CLI {
+	t.Helper()
+	t.Setenv("RSH_CONFIG_DIR", filepath.Join(t.TempDir(), "config"))
+	t.Setenv("RSH_CACHE_DIR", filepath.Join(t.TempDir(), "cache"))
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/openapi.json":
+			response.Header().Set("Content-Type", "application/json")
+			fmt.Fprintf(response, `{
+				"openapi":"3.1.0",
+				"info":{"title":"Agent Kanban","version":"1.0.0"},
+				"paths":{
+					"/tasks":{
+						"get":{
+							"operationId":"listTasks",
+							"tags":["task"],
+							"summary":"List tasks",
+							"parameters":[
+								{"name":"page","in":"query","schema":{"type":"integer"}},
+								{"name":"pageSize","in":"query","schema":{"type":"integer"}}
+							],
+							"responses":{"200":{"description":"OK"}}
+						}
+					}
+				}
+			}`)
+		case "/tasks":
+			page := request.URL.Query().Get("page")
+			if page == "" {
+				page = "1"
+			}
+			if got := request.URL.Query().Get("pageSize"); got != "2" {
+				t.Fatalf("pageSize = %q, want 2", got)
+			}
+			response.Header().Set("Content-Type", "application/json")
+			switch page {
+			case "1":
+				if requests != nil {
+					(*requests)++
+				}
+				response.Header().Set("Link", fmt.Sprintf(`<%s/tasks?page=2&pageSize=2>; rel="next"`, server.URL))
+				fmt.Fprint(response, `{"items":[{"id":1},{"id":2}],"pagination":{"page":1}}`)
+			case "2":
+				if requests != nil {
+					(*requests)++
+				}
+				response.Header().Set("Link", fmt.Sprintf(`<%s/tasks?page=3&pageSize=2>; rel="next"`, server.URL))
+				fmt.Fprint(response, `{"items":[{"id":3},{"id":4}],"pagination":{"page":2}}`)
+			default:
+				if requests != nil {
+					(*requests)++
+				}
+				fmt.Fprint(response, `{"items":[{"id":5}],"pagination":{"page":3}}`)
+			}
+		default:
+			http.NotFound(response, request)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	service, err := agent.NewService(server.URL, server.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := &App{stdout: stdout, stderr: stderr}
+	runtime, err := app.newRestishRuntime(service, &restish.Config{APIs: map[string]*restish.APIConfig{
+		"agent-kanban": {
+			BaseURL: server.URL, SpecURL: server.URL + "/openapi.json", UnauthenticatedSpec: true,
+			CommandLayout: "tags", Pagination: &config.PaginationConfig{ItemsPath: "items"},
+		},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return runtime
 }
 
 func TestParseExecFlagsPreservesNativeArgumentsAfterSeparator(t *testing.T) {
@@ -605,6 +843,7 @@ func TestBindProfileCredentialsSupportsGenericHTTPRequests(t *testing.T) {
 
 func TestBindProfileCredentialsSeparatesRestishTokensByAgentSession(t *testing.T) {
 	t.Setenv("AGENT", "codex")
+	t.Setenv("AGENT_SESSION_ID", "")
 	binding := agent.CredentialBinding{Reference: "selected-reference", Scopes: []string{"issues:read"}}
 	bind := func(sessionID string) string {
 		t.Helper()
