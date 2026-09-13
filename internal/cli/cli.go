@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -929,6 +930,10 @@ func (a *App) runRestish(ctx context.Context, service *agent.Service, client *ca
 		}
 		var selected []map[string]any
 		operation, operationSelected := selectedOperation(inspection.Operations, args[1:])
+		var operationHelp *restish.OperationInspection
+		if operationSelected && helpRequested(args[1:]) {
+			operationHelp = &operation
+		}
 		if operationSelected && invocationRequiresAuthority(args[1:]) && operationRequiresAuthority(operation) {
 			details, detailsErr := client.AuthorizationDetails(ctx, server)
 			if detailsErr != nil {
@@ -952,6 +957,9 @@ func (a *App) runRestish(ctx context.Context, service *agent.Service, client *ca
 		runtime, err = a.newRestishRuntime(service, config)
 		if err != nil {
 			return err
+		}
+		if operationHelp != nil {
+			runtime.Stdout = &operationHelpWriter{out: a.stdout, operation: *operationHelp}
 		}
 	} else if server, ok := selectedGenericResourceServer(servers, args); ok {
 		profile := "default"
@@ -1007,8 +1015,12 @@ func (a *App) runRestish(ctx context.Context, service *agent.Service, client *ca
 	if genericOperation != nil {
 		runOptions.IdempotencyProtected = genericOperation.RequiresIdempotencyKey
 	}
+	runtime.Stderr = productVocabularyWriter{out: a.stderr}
 	if err := runtime.RunWithOptions(argv, runOptions); err != nil {
 		return toolboxRuntimeError{cause: err}
+	}
+	if helpWriter, ok := runtime.Stdout.(*operationHelpWriter); ok {
+		return helpWriter.Flush()
 	}
 	return nil
 }
@@ -1059,7 +1071,13 @@ func hasRuntimeFlag(args []string, name string) bool {
 type toolboxRuntimeError struct{ cause error }
 
 func (e toolboxRuntimeError) Error() string {
-	replacer := strings.NewReplacer(
+	return productVocabularyReplacer().Replace(e.cause.Error())
+}
+
+func (e toolboxRuntimeError) Unwrap() error { return e.cause }
+
+func productVocabularyReplacer() *strings.Replacer {
+	return strings.NewReplacer(
 		"--rsh-output-format", "--output", "--rsh-print", "--include", "--rsh-header", "--header",
 		"--rsh-query", "--query", "--rsh-filter", "--filter", "--rsh-content-type", "--content-type",
 		"--rsh-timeout", "--timeout",
@@ -1068,10 +1086,66 @@ func (e toolboxRuntimeError) Error() string {
 		"--rsh-retry", "--retry", "--rsh-validate", "--validate", "--rsh-generate-body", "--generate-body",
 		"Restish", "Toolbox", "restish", "toolbox",
 	)
-	return replacer.Replace(e.cause.Error())
 }
 
-func (e toolboxRuntimeError) Unwrap() error { return e.cause }
+type productVocabularyWriter struct {
+	out io.Writer
+}
+
+func (w productVocabularyWriter) Write(p []byte) (int, error) {
+	_, err := io.WriteString(w.out, productVocabularyReplacer().Replace(string(p)))
+	if err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
+type operationHelpWriter struct {
+	out       io.Writer
+	operation restish.OperationInspection
+	buffer    bytes.Buffer
+	flushed   bool
+}
+
+func (w *operationHelpWriter) Write(p []byte) (int, error) {
+	return w.buffer.Write(p)
+}
+
+func (w *operationHelpWriter) Flush() error {
+	if w.flushed {
+		return nil
+	}
+	w.flushed = true
+	defer w.buffer.Reset()
+	_, err := io.WriteString(w.out, appendGeneratedPaginationHelp(productVocabularyReplacer().Replace(w.buffer.String()), w.operation))
+	return err
+}
+
+func appendGeneratedPaginationHelp(help string, operation restish.OperationInspection) string {
+	if operation.ID == "" || strings.Contains(help, "--no-paginate") {
+		return help
+	}
+	if !strings.HasSuffix(help, "\n") {
+		help += "\n"
+	}
+	return help + `
+Pagination Options:
+  Generated list operations automatically follow pagination links when available.
+  Use operation flags such as --page-size for per-page size; use --max-items for a total item cap.
+      --no-paginate      return only the first page
+      --max-pages int    maximum pages to fetch (0 is unlimited) (default 25)
+      --max-items int    maximum total items to process (0 is unlimited)
+`
+}
+
+func helpRequested(args []string) bool {
+	for _, arg := range args {
+		if arg == "--help" || arg == "-h" {
+			return true
+		}
+	}
+	return false
+}
 
 func (a *App) newRestishRuntime(service *agent.Service, config *restish.Config) (*restish.CLI, error) {
 	return a.newRestishRuntimeWithCommandSurface(service, config, restish.CommandSurface{
