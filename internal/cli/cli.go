@@ -165,7 +165,7 @@ func (a *App) execCommand() *cobra.Command {
 				return err
 			}
 			observability.LogDuration(logger, observability.LevelTrace, "authorization_context.discover", phaseStartedAt, "resource_server", server.CommandName)
-			selected, err := a.resolveContext(service, server, details, options.context)
+			selected, source, err := a.resolveContextSelection(service, server, details, options.context)
 			if err != nil {
 				return err
 			}
@@ -182,7 +182,7 @@ func (a *App) execCommand() *cobra.Command {
 				ExactAuthorizationContext: true,
 				EffectiveScopes:           executionScopes(details, selected, server.Scopes),
 				RequestAuthority: func(ctx context.Context, scopes []string) error {
-					_, err := accessService.Request(ctx, server, scopes, selected, "Run the requested native command", access.RequestOptions{})
+					_, err := a.requestAccess(ctx, accessService, server, scopes, details, selected, source, "Run the requested native command", access.RequestOptions{})
 					return err
 				},
 			})
@@ -303,7 +303,7 @@ func (a *App) requestCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			details, err := a.resolveContext(agentService, server, contexts, contextID)
+			details, source, err := a.resolveContextSelection(agentService, server, contexts, contextID)
 			if err != nil {
 				return err
 			}
@@ -311,11 +311,10 @@ func (a *App) requestCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			receipt, err := accessService.Request(ctx, server, scopes, details, reason, access.RequestOptions{Handoff: handoff})
+			receipt, err := a.requestAccess(ctx, accessService, server, scopes, contexts, details, source, reason, access.RequestOptions{Handoff: handoff})
 			if err != nil {
-				var responseError *access.ResponseError
-				if a.json && errors.As(err, &responseError) && json.Valid(responseError.Body) {
-					if printErr := a.printJSON(json.RawMessage(responseError.Body)); printErr != nil {
+				if a.json && len(receipt.Error) > 0 {
+					if printErr := a.printJSON(receipt.Error); printErr != nil {
 						return printErr
 					}
 				}

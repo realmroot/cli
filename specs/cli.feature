@@ -82,6 +82,7 @@ Feature: Realmroot Toolbox command line
     When the Agent runs "realmroot toolbox github context"
     Then Toolbox lists every stable Context ID, display name, identity type, authorization status, and current selection
     And the ordinary list includes Agent-granted scopes, requestable scopes, and published scopes not currently requestable
+    And repeated "--scope" options show matching authorized, requestable, and unavailable scopes without filtering Contexts
     And Context details show the Resource Server supplied description and attributes
     When the Agent selects the Context by its stable ID
     Then subsequent GitHub operations use that Context by default
@@ -106,6 +107,17 @@ Feature: Realmroot Toolbox command line
     And the controller interaction is opened and polled by default
     And the resulting credential offer is stored without a target private key or access token
     And the command returns only the ready authority without exposing the internal credential binding
+
+  @journey:access-context-preflight @entrypoint:agent-request
+  Scenario: Inspect the selected Context before requesting authority
+    Given the Resource Server publishes Contexts and their authorized and requestable scopes
+    When the Agent requests scopes using an explicit, saved, or sole available Context
+    Then Toolbox reports the stable Context ID, name, type, and selection source before requesting approval
+    And it shows every Context's match for the requested scopes without changing the selected Context
+    And the CLI submits the selected Context and scopes to the server even when discovery reports missing permissions
+    And a server rejection exits with code 1 and preserves its JSON error body
+    And pending and completed JSON results preserve the selected Context and selection source
+    But external account connection or scope expansion can still proceed through controller approval
 
   @journey:task-scoped-access-handoff @entrypoint:agent-request
   Scenario: Hand an approval link to a remote controller

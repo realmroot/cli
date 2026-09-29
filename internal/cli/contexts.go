@@ -9,10 +9,10 @@ import (
 	"slices"
 	"sort"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/realmroot/cli/internal/agent"
 	"github.com/realmroot/cli/internal/catalog"
+	"github.com/spf13/pflag"
 )
 
 type contextSummary struct {
@@ -27,19 +27,23 @@ type contextSummary struct {
 }
 
 type contextListItem struct {
-	Type                       string   `json:"type"`
-	AuthorizedScopes           []string `json:"authorizedScopes"`
-	RequestableScopes          []string `json:"requestableScopes"`
-	UnavailableScopes          []string `json:"unavailableScopes"`
-	ID                         string   `json:"id,omitempty"`
-	Name                       string   `json:"name"`
-	AccountAuthorizationStatus string   `json:"accountAuthorizationStatus"`
-	Current                    bool     `json:"current"`
+	Type                       string      `json:"type"`
+	AuthorizedScopes           []string    `json:"authorizedScopes"`
+	RequestableScopes          []string    `json:"requestableScopes"`
+	UnavailableScopes          []string    `json:"unavailableScopes"`
+	ID                         string      `json:"id,omitempty"`
+	Name                       string      `json:"name"`
+	AccountAuthorizationStatus string      `json:"accountAuthorizationStatus"`
+	Current                    bool        `json:"current"`
+	AuthorizedScopeCount       int         `json:"authorizedScopeCount"`
+	RequestableScopeCount      int         `json:"requestableScopeCount"`
+	Match                      *scopeMatch `json:"match,omitempty"`
 }
 
 type contextResult struct {
-	ResourceServer string            `json:"resourceServer"`
-	Contexts       []contextListItem `json:"contexts"`
+	ResourceServer  string            `json:"resourceServer"`
+	Contexts        []contextListItem `json:"contexts"`
+	RequestedScopes []string          `json:"requestedScopes,omitempty"`
 }
 
 type contextSelectionResult struct {
@@ -71,7 +75,8 @@ func listContexts(details []catalog.AuthorizationDetail, selected []map[string]a
 		result = append(result, contextListItem{
 			Type: kind, AuthorizedScopes: append([]string{}, detail.AuthorizedScopes...), RequestableScopes: append([]string{}, detail.RequestableScopes...), UnavailableScopes: unavailable,
 			ID: detail.ID, Name: detail.Name, AccountAuthorizationStatus: detail.AccountAuthorizationStatus,
-			Current: sameDetails(detail.AuthorizationDetail, selected),
+			Current:              sameDetails(detail.AuthorizationDetail, selected),
+			AuthorizedScopeCount: len(detail.AuthorizedScopes), RequestableScopeCount: len(detail.RequestableScopes),
 		})
 	}
 	return result
@@ -92,6 +97,17 @@ func summarizeContexts(details []catalog.AuthorizationDetail, selected []map[str
 }
 
 func (a *App) contextCommand(ctx context.Context, service *agent.Service, client *catalog.Client, serverName string, args []string) error {
+	flags := pflag.NewFlagSet("context", pflag.ContinueOnError)
+	flags.SetOutput(a.stderr)
+	scopes := flags.StringArray("scope", nil, "show permission matches without filtering Contexts (repeatable)")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	args = flags.Args()
+	*scopes = requestedScopes(*scopes)
+	if len(*scopes) > 0 && len(args) > 0 {
+		return errors.New("--scope applies only to the Context list")
+	}
 	server, err := client.Find(ctx, serverName)
 	if err != nil {
 		return err
@@ -116,7 +132,11 @@ func (a *App) contextCommand(ctx context.Context, service *agent.Service, client
 		return selectedErr
 	}
 	if len(args) == 0 {
-		return a.printContexts(contextResult{ResourceServer: server.CommandName, Contexts: listContexts(details, selected, server.Scopes...)})
+		items := listContexts(details, selected, server.Scopes...)
+		if len(*scopes) > 0 {
+			items = contextMatches(details, selected, *scopes, server.Scopes...)
+		}
+		return a.printContexts(contextResult{ResourceServer: server.CommandName, Contexts: items, RequestedScopes: *scopes})
 	}
 	if len(args) != 2 || (args[0] != "show" && args[0] != "use") {
 		return fmt.Errorf("usage: realmroot toolbox %s context [show|use] <context-id> | clear", server.CommandName)
@@ -144,42 +164,47 @@ func (a *App) contextCommand(ctx context.Context, service *agent.Service, client
 }
 
 func (a *App) resolveContext(service *agent.Service, server catalog.ResourceServer, details []catalog.AuthorizationDetail, contextID string) ([]map[string]any, error) {
+	selected, _, err := a.resolveContextSelection(service, server, details, contextID)
+	return selected, err
+}
+
+func (a *App) resolveContextSelection(service *agent.Service, server catalog.ResourceServer, details []catalog.AuthorizationDetail, contextID string) ([]map[string]any, string, error) {
 	if contextID != "" {
 		detail, err := contextBySelector(details, contextID)
 		if err != nil {
 			var unavailable contextUnavailableError
 			if errors.As(err, &unavailable) {
-				return nil, fmt.Errorf("%w; connect or update it in Realmroot Connections: %s/connections", err, service.Origin())
+				return nil, "", fmt.Errorf("%w; connect or update it in Realmroot Connections: %s/connections", err, service.Origin())
 			}
-			return nil, err
+			return nil, "", err
 		}
-		return []map[string]any{detail.AuthorizationDetail}, nil
+		return []map[string]any{detail.AuthorizationDetail}, "command_line", nil
 	}
 	selected, err := service.SelectedContext(server.ResourceURL)
 	if err == nil {
 		for _, detail := range details {
 			if sameDetails(detail.AuthorizationDetail, selected) {
-				return selected, nil
+				return selected, "saved_default", nil
 			}
 		}
 		if len(details) == 0 {
 			if err := service.ClearContext(server.ResourceURL); err != nil {
-				return nil, err
+				return nil, "", err
 			}
-			return disconnectedAuthorizationDetails(server), nil
+			return disconnectedAuthorizationDetails(server), "resource_default", nil
 		}
-		return nil, fmt.Errorf("the selected %s Context is no longer available; run `realmroot toolbox %s context`", server.CommandName, server.CommandName)
+		return nil, "", fmt.Errorf("the selected %s Context is no longer available; run `realmroot toolbox %s context`", server.CommandName, server.CommandName)
 	}
 	if !errors.Is(err, os.ErrNotExist) {
-		return nil, err
+		return nil, "", err
 	}
 	switch len(details) {
 	case 0:
-		return disconnectedAuthorizationDetails(server), nil
+		return disconnectedAuthorizationDetails(server), "resource_default", nil
 	case 1:
-		return []map[string]any{details[0].AuthorizationDetail}, nil
+		return []map[string]any{details[0].AuthorizationDetail}, "only_available", nil
 	default:
-		return nil, fmt.Errorf("Resource Server %q has multiple Contexts; select one with `realmroot toolbox %s context use <context-id>` or pass --context <context-id>", server.CommandName, server.CommandName)
+		return nil, "", fmt.Errorf("Resource Server %q has multiple Contexts; select one with `realmroot toolbox %s context use <context-id>` or pass --context <context-id>", server.CommandName, server.CommandName)
 	}
 }
 
@@ -228,20 +253,10 @@ func (a *App) printContexts(result contextResult) error {
 		fmt.Fprintf(a.stdout, "Resource Server %q does not define Contexts.\n", result.ResourceServer)
 		return nil
 	}
-	w := tabwriter.NewWriter(a.stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "CURRENT\tID\tNAME\tTYPE\tACCOUNT\tAGENT GRANTED\tREQUESTABLE\tNOT CURRENTLY REQUESTABLE")
-	for _, item := range result.Contexts {
-		current := ""
-		if item.Current {
-			current = "*"
-		}
-		id := item.ID
-		if id == "" {
-			id = "-"
-		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", current, id, item.Name, item.Type, item.AccountAuthorizationStatus, scopeNames(item.AuthorizedScopes), scopeNames(item.RequestableScopes), scopeNames(item.UnavailableScopes))
+	if len(result.RequestedScopes) > 0 {
+		fmt.Fprintf(a.stdout, "Requested scopes: %s\n", strings.Join(result.RequestedScopes, ", "))
 	}
-	return w.Flush()
+	return printContextRows(a.stdout, result.Contexts)
 }
 
 func (a *App) printContext(resourceServer string, item contextSummary) error {

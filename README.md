@@ -144,6 +144,15 @@ precheck permissions or change Contexts. Server errors retain a nonzero exit
 status; `--json` preserves the server error body on stdout, with diagnostics on
 stderr.
 
+The list also includes permission counts. Use repeated `--scope` options on
+`realmroot toolbox platform context` to compare permission matches across the
+complete list without changing the selected Context. Before an access
+request, CLI prints the selected Context's available ID, name, type, and
+selection source to stderr. JSON request results include that Context and the
+requested scopes.
+Permission matches are informational: the server decides whether to accept the
+request, and its JSON error response is preserved on stdout with `--json`.
+
 Use `realmroot toolbox sync <resource-server>` after that Resource Server
 publishes a changed OpenAPI contract. Sync bypasses the cached OpenAPI document
 and atomically refreshes the generated command catalog. It does not request
