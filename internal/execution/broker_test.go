@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -233,7 +234,13 @@ func TestNativeCommandsDescribeWrappedCloudflareExecutables(t *testing.T) {
 }
 
 func TestNativeCloudflareCommandSelectsOnlyAdvertisedPackage(t *testing.T) {
-	t.Parallel()
+	bin := t.TempDir()
+	for _, name := range []string{"npx", "pnpm"} {
+		if err := os.WriteFile(filepath.Join(bin, name), nil, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", bin)
 	integrations := []catalog.ToolIntegration{
 		{ID: "wrangler", Executables: []string{"wrangler", "npx", "pnpm"}, Protocol: "cloudflare-api-base"},
 		{ID: "cf", Executables: []string{"cf", "npx", "pnpm"}, Protocol: "cloudflare-api-base"},
