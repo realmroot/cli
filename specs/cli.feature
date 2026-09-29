@@ -164,11 +164,11 @@ Feature: Realmroot Toolbox command line
     And local commits derive stable name and email from the immutable Agent username without changing global Git configuration
 
   @journey:cloudflare-native-tool @entrypoint:exec
-  Scenario: Use Wrangler as the stable Agent
-    Given Cloudflare advertises a Wrangler integration
+  Scenario: Use Cloudflare CLIs as the stable Agent
+    Given Cloudflare advertises Wrangler and cf integrations
     And the Agent has approved Cloudflare authority
-    When it runs Wrangler through "realmroot exec cloudflare"
-    Then Wrangler API traffic is routed through the Cloudflare Resource Server
+    When it runs Wrangler or cf through "realmroot exec cloudflare"
+    Then Cloudflare API traffic is routed through the Cloudflare Resource Server
     And existing Cloudflare credentials are removed from the child environment
     And Cloudflare asset-upload credentials remain process-local and are accepted only for their matching upload session
 

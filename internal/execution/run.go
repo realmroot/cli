@@ -241,8 +241,8 @@ func NativeCommands(integrations []catalog.ToolIntegration) []string {
 }
 
 func nativeCommandPrefix(integration catalog.ToolIntegration, executable string) []string {
-	if (executable == "npx" || executable == "pnpm") && integration.ID == "wrangler" {
-		return []string{executable, "wrangler"}
+	if (executable == "npx" || executable == "pnpm") && (integration.ID == "wrangler" || integration.ID == "cf") {
+		return []string{executable, integration.ID}
 	}
 	return []string{executable}
 }
@@ -272,7 +272,7 @@ func setEnvironment(values []string, pairs ...string) []string {
 
 func providerCredentialNames(id string) []string {
 	switch id {
-	case "wrangler":
+	case "wrangler", "cf":
 		return []string{"CLOUDFLARE_API_TOKEN", "CLOUDFLARE_API_KEY", "CLOUDFLARE_EMAIL", "CF_API_TOKEN", "CF_API_KEY", "CF_EMAIL"}
 	case "gh":
 		return []string{"GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN", "GH_HOST", "GH_CONFIG_DIR", "SSL_CERT_FILE"}
