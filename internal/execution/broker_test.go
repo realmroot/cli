@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -220,23 +221,50 @@ func TestNativeResourceToolRejectsUnadvertisedExecutables(t *testing.T) {
 	}
 }
 
-func TestNativeCommandsDescribeWrappedWranglerExecutables(t *testing.T) {
+func TestNativeCommandsDescribeWrappedCloudflareExecutables(t *testing.T) {
 	t.Parallel()
 	commands := NativeCommands([]catalog.ToolIntegration{
 		{ID: "git", Executables: []string{"git"}, Protocol: "git-smart-http"},
 		{ID: "wrangler", Executables: []string{"wrangler", "npx", "pnpm"}, Protocol: "cloudflare-api-base"},
+		{ID: "cf", Executables: []string{"cf", "npx", "pnpm"}, Protocol: "cloudflare-api-base"},
 	})
-	if got := strings.Join(commands, ", "); got != "git, wrangler, npx wrangler, pnpm wrangler" {
+	if got := strings.Join(commands, ", "); got != "git, wrangler, npx wrangler, pnpm wrangler, cf, npx cf, pnpm cf" {
 		t.Fatalf("commands = %q", got)
+	}
+}
+
+func TestNativeCloudflareCommandSelectsOnlyAdvertisedPackage(t *testing.T) {
+	bin := t.TempDir()
+	for _, name := range []string{"npx", "pnpm"} {
+		if err := os.WriteFile(filepath.Join(bin, name), nil, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", bin)
+	integrations := []catalog.ToolIntegration{
+		{ID: "wrangler", Executables: []string{"wrangler", "npx", "pnpm"}, Protocol: "cloudflare-api-base"},
+		{ID: "cf", Executables: []string{"cf", "npx", "pnpm"}, Protocol: "cloudflare-api-base"},
+	}
+	for _, command := range [][]string{{"npx", "cf", "zones", "list"}, {"pnpm", "cf", "zones", "list"}} {
+		integration, _, err := selectIntegration(integrations, command)
+		if err != nil || integration.ID != "cf" {
+			t.Fatalf("command %v selected %q: %v", command, integration.ID, err)
+		}
+	}
+	_, _, err := selectIntegration(integrations, []string{"npx", "unrelated"})
+	if err == nil || !strings.Contains(err.Error(), "does not advertise") {
+		t.Fatalf("unadvertised package error = %v", err)
 	}
 }
 
 func TestCloudflareNativeToolEnvironmentRemovesProviderCredentials(t *testing.T) {
 	t.Parallel()
-	values := cleanEnvironment([]string{"PATH=/bin", "CLOUDFLARE_API_TOKEN=secret", "CF_API_KEY=secret", "SAFE=value"}, providerCredentialNames("wrangler"))
-	joined := strings.Join(values, "\n")
-	if strings.Contains(joined, "secret") || !strings.Contains(joined, "SAFE=value") {
-		t.Fatalf("environment = %q", joined)
+	for _, integration := range []string{"wrangler", "cf"} {
+		values := cleanEnvironment([]string{"PATH=/bin", "CLOUDFLARE_API_TOKEN=secret", "CF_API_KEY=secret", "SAFE=value"}, providerCredentialNames(integration))
+		joined := strings.Join(values, "\n")
+		if strings.Contains(joined, "secret") || !strings.Contains(joined, "SAFE=value") {
+			t.Fatalf("%s environment = %q", integration, joined)
+		}
 	}
 }
 

@@ -175,7 +175,7 @@ func (b *Broker) handler(mapPath func(*http.Request) (string, error), authorize 
 func (b *Broker) cloudflareHandler(providerBase string) http.HandlerFunc {
 	return func(response http.ResponseWriter, request *http.Request) {
 		if !strings.HasPrefix(request.URL.Path, "/client/v4/") {
-			http.Error(response, "Wrangler request is outside Cloudflare API v4", http.StatusBadRequest)
+			http.Error(response, "request is outside Cloudflare API v4", http.StatusBadRequest)
 			return
 		}
 		path := strings.TrimPrefix(request.URL.RequestURI(), "/client/v4")
